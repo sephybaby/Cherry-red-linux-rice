@@ -1,0 +1,694 @@
+/* ============================================================
+ * SWAYNC — CATPPUCCIN MOCHA
+ * ============================================================ */
+
+/* ==================== CATPPUCCIN MOCHA ==================== */
+
+@define-color text              #e0c5c8;
+@define-color background        #3d020d;
+@define-color background-alt    #181825;
+
+@define-color selected          #cba6f7;
+@define-color hover             #45475a;
+@define-color urgent            #f38ba8;
+
+@define-color surface           #691c24;
+@define-color surface-hover     #45475a;
+
+@define-color surface-low       #181825;
+@define-color surface-high      #45475a;
+@define-color surface-highest   #585b70;
+
+@define-color subtext0          #a6adc8;
+@define-color subtext1          #bac2de;
+
+@define-color cherryred         #751d27;
+@define-color mauve             #cba6f7;
+@define-color lavender          #b4befe;
+@define-color blue              #89b4fa;
+@define-color sky               #89dceb;
+@define-color sapphire          #74c7ec;
+@define-color teal              #94e2d5;
+@define-color green             #a6e3a1;
+@define-color yellow            #f9e2af;
+@define-color peach             #fab387;
+@define-color maroon            #eba0ac;
+@define-color red               #f38ba8;
+@define-color pink              #f5c2e7;
+@define-color flamingo          #f2cdcd;
+
+/* ============================================================
+ * GLOBAL
+ * ============================================================ */
+
+* {
+  color: @text;
+  all: unset;
+
+  font-size: 14px;
+  font-family: "JetBrains Mono Nerd Font", "Segoe UI", sans-serif;
+
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== BLANK WINDOW ==================== */
+
+.blank-window {
+  background: transparent;
+}
+
+/* ============================================================
+ * CONTROL CENTER
+ * ============================================================ */
+
+.control-center {
+  background: @background;
+
+  border-radius: 20px;
+
+  border: 1px solid alpha(@surface-highest, 0.35);
+
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.25),
+    0 0 1px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 alpha(@text, 0.05);
+
+  margin: 12px;
+  padding: 0;
+}
+
+/* ==================== HEADER ==================== */
+
+.control-center-header {
+  padding: 20px 20px 12px 20px;
+
+  border-bottom: 1px solid alpha(@text, 0.06);
+}
+
+/* ============================================================
+ * NOTIFICATIONS
+ * ============================================================ */
+
+.control-center .notification-row {
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.control-center .notification-row .notification-background {
+  background: @surface;
+
+  border-radius: 14px;
+
+  margin: 4px 0;
+  padding: 0;
+
+  border: 1px solid alpha(@surface-highest, 0.25);
+
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.control-center .notification-row .notification-background:hover {
+  background: @surface-high;
+
+  transform: translateY(-1px);
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* ==================== CRITICAL ==================== */
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification.critical {
+  background: linear-gradient(135deg, alpha(@red, 0.12) 0%, transparent 100%);
+
+  border-left: 3px solid @red;
+
+  border-radius: 14px;
+}
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification.critical
+  .notification-content {
+  color: @text;
+}
+
+/* ==================== NOTIFICATION CONTENT ==================== */
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  .notification-content {
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  .notification-content
+  .notification-body {
+  padding-top: 6px;
+
+  opacity: 0.85;
+
+  line-height: 1.4;
+}
+
+/* ==================== NOTIFICATION ACTIONS ==================== */
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  > *:last-child
+  > * {
+  min-height: auto;
+
+  padding: 8px 12px 12px 12px;
+}
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  > *:last-child
+  > *
+  .notification-action {
+  background: alpha(@cherryred, 0.18);
+
+  color: @cherryred;
+
+  border-radius: 10px;
+
+  margin: 4px;
+  padding: 10px 18px;
+
+  font-weight: 500;
+
+  border: 1px solid alpha(@mauve, 0.25);
+
+  min-height: 36px;
+}
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  > *:last-child
+  > *
+  .notification-action:hover {
+  background: alpha(@cherryred, 0.28);
+
+  border-color: alpha(@cherryred, 0.4);
+
+  transform: scale(1.02);
+}
+
+.control-center
+  .notification-row
+  .notification-background
+  .notification
+  > *:last-child
+  > *
+  .notification-action:active {
+  background: alpha(@mauve, 0.35);
+
+  transform: scale(0.98);
+}
+
+/* ============================================================
+ * WIDGET TITLE / HEADER
+ * ============================================================ */
+
+.widget-title {
+  font-size: 1.3em;
+  font-weight: 600;
+
+  margin: 0;
+
+  padding: 20px 20px 8px 20px;
+
+  border-bottom: 1px solid alpha(@text, 0.18);
+}
+
+.widget-title button {
+  background: @cherryred;
+
+  border-radius: 10px;
+
+  padding: 6px 12px;
+
+  border: 1px solid alpha(@surface-highest, 0.3);
+
+  font-weight: 500;
+
+  min-height: 36px;
+
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.widget-title button:hover {
+  background: @cherryred;
+
+  border-color: alpha(@mauve, 0.35);
+
+  transform: translateY(-1px);
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.widget-title button:active {
+  background: alpha(@mauve, 0.25);
+
+  transform: scale(0.98);
+}
+
+/* ============================================================
+ * QUICK SETTINGS BUTTONS
+ * ============================================================ */
+
+.widget-buttons-grid {
+  padding: 12px;
+  margin: 0;
+
+  border-radius: 0;
+
+  background: transparent;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button {
+  margin: 4px;
+
+  background: @surface;
+
+  border-radius: 12px;
+
+  border: 1px solid alpha(@surface-highest, 0.25);
+
+  min-height: 64px;
+  min-width: 64px;
+
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
+  background: @surface-high;
+
+  border-color: alpha(@mauve, 0.35);
+
+  transform: translateY(-2px);
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:active {
+  background: alpha(@mauve, 0.25);
+
+  border-color: alpha(@mauve, 0.4);
+
+  transform: scale(0.96);
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:checked {
+  background: linear-gradient(
+    135deg,
+    alpha(@mauve, 0.25) 0%,
+    alpha(@mauve, 0.15) 100%
+  );
+
+  border-color: alpha(@mauve, 0.45);
+
+  color: @mauve;
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button label {
+  font-family: "JetBrains Mono Nerd Font";
+
+  font-size: 20px;
+
+  opacity: 0.7;
+
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-buttons-grid > flowbox > flowboxchild > button:hover label {
+  transform: scale(1.1);
+}
+
+/* ============================================================
+ * VOLUME & BACKLIGHT
+ * ============================================================ */
+
+.widget-volume {
+  background: transparent;
+
+  padding: 12px 20px 2px 20px;
+
+  margin: 0;
+
+  border-radius: 0;
+
+  border-top: 1px solid alpha(@text, 0.06);
+}
+
+.widget-backlight {
+  background: transparent;
+
+  padding: 2px 20px 12px 20px;
+
+  margin: 0;
+
+  border-radius: 0;
+
+  border-top: 1px solid alpha(@text, 0.06);
+}
+
+/* ==================== TROUGHS ==================== */
+
+.widget-volume trough,
+.widget-backlight trough {
+  background: @surface-low;
+
+  border-radius: 12px;
+
+  min-height: 8px;
+
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== HIGHLIGHT ==================== */
+
+.widget-volume highlight,
+.widget-backlight highlight {
+  background: linear-gradient(90deg, @mauve 0%, alpha(@mauve, 0.8) 100%);
+
+  border-radius: 12px;
+
+  box-shadow: 0 0 8px alpha(@mauve, 0.3);
+}
+
+/* ==================== LABEL ==================== */
+
+.widget-volume label,
+.widget-backlight label {
+  font-size: 29px;
+
+  color: @text;
+
+  margin-right: 16px;
+  margin-left: 8px;
+
+  opacity: 0.7;
+}
+
+/* ==================== SLIDER ==================== */
+
+.widget-volume slider,
+.widget-backlight slider {
+  background: @text;
+
+  border-radius: 50%;
+
+  min-height: 18px;
+  min-width: 18px;
+
+  margin: -5px 0;
+
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    0 0 0 2px @mauve;
+
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-volume slider:hover,
+.widget-backlight slider:hover {
+  min-height: 20px;
+  min-width: 20px;
+
+  box-shadow:
+    0 3px 10px rgba(0, 0, 0, 0.3),
+    0 0 0 3px @mauve;
+}
+
+/* ============================================================
+ * DO NOT DISTURB
+ * ============================================================ */
+
+.widget-dnd {
+  margin: 0;
+
+  padding: 16px 20px 5px 20px;
+
+  background: transparent;
+
+  border-radius: 0;
+
+  border-top: 1px solid alpha(@text, 0.06);
+
+  font-size: 1.1rem;
+
+  font-weight: 500;
+}
+
+/* ==================== SWITCH ==================== */
+
+.widget-dnd > switch {
+  background: #2b0106;
+
+  border-radius: 24px;
+
+  border: 1px solid alpha(@surface-highest, 0.3);
+
+  padding: 3px;
+
+  min-width: 48px;
+  min-height: 28px;
+
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.widget-dnd > switch:hover {
+  background: @surface-highest;
+
+  border-color: alpha(@mauve, 0.25);
+}
+
+.widget-dnd > switch:checked {
+  background: @mauve;
+
+  border-color: @mauve;
+
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.1),
+    0 0 8px alpha(@mauve, 0.4);
+}
+
+.widget-dnd > switch:checked:hover {
+  background: alpha(@mauve, 0.9);
+}
+
+/* ==================== SWITCH SLIDER ==================== */
+
+.widget-dnd > switch slider {
+  background: @text;
+
+  border-radius: 50%;
+
+  min-width: 22px;
+  min-height: 22px;
+
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-dnd > switch:checked slider {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================
+ * MEDIA PLAYER
+ * ============================================================ */
+
+.widget-mpris {
+  background: transparent;
+
+  border-radius: 0;
+
+  color: @text;
+
+  margin: 0px 0px -14px 0px;
+
+  padding: 12px;
+
+  border-top: 1px solid alpha(@text, 0.06);
+}
+
+.widget-mpris-player {
+  background: linear-gradient(
+    135deg,
+    alpha(@surface, 0.9) 0%,
+    alpha(@surface-high, 0.65) 100%
+  );
+
+  border: 1px solid alpha(@surface-highest, 0.3);
+
+  border-radius: 16px;
+
+  padding: 14px;
+
+  margin: 0;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  position: relative;
+
+  overflow: hidden;
+}
+
+/* ==================== ALBUM BACKGROUND ==================== */
+
+.widget-mpris .widget-mpris-player .mpris-background {
+  filter: blur(30px) brightness(0.6);
+
+  opacity: 0.6;
+
+  border-radius: 16px;
+
+  position: absolute;
+
+  top: -20px;
+  left: -20px;
+  right: -20px;
+  bottom: -20px;
+}
+
+/* ==================== ALBUM ART ==================== */
+
+.widget-mpris-album-art {
+  border-radius: 12px;
+
+  border: 1px solid alpha(@surface-highest, 0.35);
+
+  margin: 0 12px 12px 0;
+
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+  min-width: 80px;
+  min-height: 80px;
+}
+
+/* ==================== TITLE ==================== */
+
+.widget-mpris-title {
+  font-weight: 600;
+
+  font-size: 1.1rem;
+
+  color: @text;
+
+  margin-bottom: 4px;
+
+  line-height: 1.3;
+}
+
+/* ==================== SUBTITLE ==================== */
+
+.widget-mpris-subtitle {
+  font-weight: 400;
+
+  font-size: 0.9rem;
+
+  color: @subtext1;
+
+  opacity: 0.7;
+
+  line-height: 1.3;
+}
+
+/* ==================== MEDIA BUTTONS ==================== */
+
+.widget-mpris button {
+  color: @text;
+
+  opacity: 0.7;
+
+  margin: 12px 6px 0 6px;
+
+  min-width: 47px;
+  min-height: 10px;
+
+  border-radius: 50%;
+
+  background: @surface;
+
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-mpris button:hover {
+  background: @surface-high;
+
+  border-color: alpha(@mauve, 0.3);
+
+  transform: scale(1.08);
+
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.widget-mpris button:active {
+  transform: scale(0.95);
+}
+
+/* ==================== PLAY / PAUSE ==================== */
+
+.widget-mpris button:nth-child(3) {
+  min-width: 48px;
+  min-height: 48px;
+
+  background: alpha(@mauve, 0.18);
+
+  border-color: alpha(@mauve, 0.25);
+}
+
+.widget-mpris button:nth-child(3):hover {
+  background: alpha(@mauve, 0.3);
+
+  border-color: alpha(@mauve, 0.4);
+
+  box-shadow: 0 4px 12px alpha(@mauve, 0.3);
+}
+
+/* ============================================================
+ * ANIMATIONS
+ * ============================================================ */
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+
+    opacity: 1;
+  }
+}
+
+.notification-row {
+  animation: slide-in 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}

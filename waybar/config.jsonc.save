@@ -1,0 +1,24 @@
+{
+  "position": "top",
+  "margin-top": 15,
+
+  "modules-left": ["tray"],
+  "modules-center": ["hyprland/workspaces"],
+  "modules-right": [
+    "pulseaudio",
+    "network",
+    "backlight",
+    "power-profiles-daemon",
+    "battery",
+    "custom/notification",
+    "clock": {
+	"format": "{:%I:%M %p}"
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1728d4b (mew)
+},
+  ],
+
+  "include": ["~/.config/waybar/modules.json"],
+}

@@ -1,0 +1,9 @@
+{
+  "workspace": {
+    "library": ["${3rd}/luv/library", "~/.config/hypr/stubs"],
+    "checkThirdParty": false
+  },
+  "diagnostics": {
+    "globals": ["hl"]
+  }
+}

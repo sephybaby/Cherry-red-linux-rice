@@ -1,0 +1,131 @@
+@import "themes/catppuccin-mocha.css";
+
+* {
+  border: none;
+  border-radius: 0px;
+  font-family: "Noto Sans", "JetBrainsMono Nerd Font Propo", sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+window#waybar {
+  background: transparent;
+}
+
+.modules-left {
+  margin: 0px 0px 10px 10px;
+}
+
+.modules-right {
+  margin: 0px 10px 10px 0px;
+}
+
+.modules-center {
+  margin: 0px 0px 10px 0px;
+}
+
+/* Tooltip */
+
+tooltip {
+  background: @crust;
+  border: 1px solid @base;
+  border-radius: 12px;
+}
+
+tooltip label {
+  color: @text;
+  padding: 6px;
+}
+
+/* Workspaces */
+
+#workspaces {
+  background-color: @crust;
+  padding: 5px 3px;
+  margin: 0 0 0 12px;
+  border: 2px solid @creme;
+  border-radius: 15px;
+}
+
+#workspaces button {
+  padding: 2px 6px;
+  margin: 0px 3px;
+  border-radius: 50px;
+  color: @text;
+  background-color: @mantle;
+  transition: all 0.3s ease-in-out;
+}
+
+#workspaces button.active {
+  background-color: @base;
+  color: @subtext1;
+  min-width: 60px;
+  border-radius: 15px;
+}
+
+#workspaces button:hover {
+  background: none;
+  box-shadow: none;
+  text-shadow: none;
+  background-color: @mantle;
+  color: @text;
+  border-right: 16px;
+  min-width: 60px;
+  background-size: 400% 400%;
+  transition: all 0.3s ease-in-out;
+}
+
+#workspaces button.urgent {
+  background-color: @sapphire;
+  color: @text;
+  border-radius: 16px;
+  min-width: 60px;
+  background-size: 400% 400%;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Applications :D */
+
+#clock,
+#tray,
+#pulseaudio,
+#network,
+#battery,
+#backlight,
+#power-profiles-daemon,
+#custom-notification {
+  background-color: @mantle;
+  padding: 0 15px 0 15px;
+  margin: 0 0 0 12px;
+  border-radius: 15px;
+  color: @subtext1;
+}
+
+#pulseaudio {
+  color: @sky;
+}
+
+#network {
+  color: @green;
+}
+
+#backlight {
+  color: @peach;
+}
+
+#battery {
+  color: @mauve;
+}
+
+#power-profiles-daemon {
+  color: @rosewater;
+}
+
+#custom-notification {
+  color: @subtext2;
+}
+
+#clock {
+  color: @maroon;
+  margin: 0 12px 0 12px;
+}
