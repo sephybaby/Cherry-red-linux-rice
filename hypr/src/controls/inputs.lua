@@ -3,11 +3,7 @@ hl.config({
 		kb_layout    = "us",
 		kb_variant   = "",
 		kb_model     = "",
-<<<<<<< HEAD
 		kb_options   = "caps:super",
-=======
-		-- kb_options   = "caps:super",
->>>>>>> 1728d4b (mew)
 		kb_rules     = "",
 
 		follow_mouse = 1,
