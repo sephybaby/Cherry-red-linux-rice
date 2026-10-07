@@ -17,11 +17,7 @@
   },
   "clock": {
     "interval": 60,
-<<<<<<< HEAD
-    "format": "{:%H:%M}",
-=======
     "format": "{:%I:%M %p}",
->>>>>>> 1728d4b (mew)
     "tooltip": true
   },
   "network": {
@@ -33,7 +29,9 @@
     "tooltip-format-wifi": "{ifname} @ {essid}\nIP: {ipaddr}\nStrength: {signalStrength}%\nFreq: {frequency}MHz\nUp: {bandwidthUpBits} Down: {bandwidthDownBits}",
     "tooltip-format-ethernet": "IP: {ipaddr}\nup: {bandwidthUpBits} down: {bandwidthDownBits}",
     "tooltip-format-disconnected": "Disconnected",
-    "max-length": 50
+    "max-length": 50,
+	"on-click": "exec ~/.config/rofi/scripts/rofi-wifi.sh"
+	
   },
   "battery": {
     "interval": 1,
@@ -44,9 +42,7 @@
     "format": "{icon} {capacity}%",
     "format-charging": "  {capacity}%",
     "format-plugged": "  {capacity}%",
-    "format-alt": "{icon}  {time}",
-    // "format-good": "", // An empty format will hide the module
-    "format-icons": [" ", " ", " ", " ", " "]
+    "format-alt": "{icon}  {time}"
   },
   "power-profiles-daemon": {
     "format": "{icon}",

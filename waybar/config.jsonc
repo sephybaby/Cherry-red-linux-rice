@@ -1,18 +1,18 @@
 {
-  "position": "top",
-  "margin-top": 15,
+    "position": "top",
+    "margin-top": 15,
 
-  "modules-left": ["tray"],
-  "modules-center": ["hyprland/workspaces"],
-  "modules-right": [
-    "pulseaudio",
-    "network",
-    "backlight",
-    "power-profiles-daemon",
-    "battery",
-    "custom/notification",
-    "clock" ,
-  ],
+    "modules-left": ["tray"],
+    "modules-center": ["hyprland/workspaces"],
+    "modules-right": [
+        "pulseaudio",
+        "network",
+        "backlight",
+        "power-profiles-daemon",
+        "battery",
+        "custom/notification",
+        "clock"
+    ],
 
-  "include": ["~/.config/waybar/modules.json"],
+    "include": ["~/.config/waybar/modules.json"]
 }

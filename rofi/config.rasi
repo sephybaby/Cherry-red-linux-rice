@@ -14,7 +14,7 @@ configuration {
 	normalize-match: true;
 	show-icons: true;
 /*	cache-dir: ;*/
-	steal-focus: false;
+	steal-focus: true;
 /*	dpi: -1;*/
 
 	/*---------- Matching setting ----------*/
