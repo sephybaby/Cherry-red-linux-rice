@@ -1,0 +1,204 @@
+/* =========================================
+   Wi-Fi Popup
+   Cherry aesthetic
+   ========================================= */
+
+window {
+    background-color: #16080e;
+    color: #f5d9e2;
+
+    border: 1px solid #4b1729;
+    border-radius: 18px;
+}
+
+/* Main container */
+
+box {
+    color: #f5d9e2;
+}
+
+/* =========================================
+   Header
+   ========================================= */
+
+header {
+    color: #f5d9e2;
+}
+
+label {
+    color: #f5d9e2;
+}
+
+/* =========================================
+   Buttons
+   ========================================= */
+
+button {
+    background-color: #241019;
+    color: #eebdcd;
+
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+
+    padding: 7px 12px;
+
+    transition: 150ms;
+}
+
+button:hover {
+    background-color: #3b1425;
+    border-color: #8f294c;
+}
+
+button:active {
+    background-color: #6e1f3a;
+}
+
+/* =========================================
+   Network list
+   ========================================= */
+
+list {
+    background-color: transparent;
+}
+
+row {
+    background-color: #21101a;
+
+    border: 1px solid #351421;
+    border-radius: 12px;
+
+    margin: 3px 0;
+}
+
+row:hover {
+    background-color: #321421;
+    border-color: #6e1f3a;
+}
+
+/* =========================================
+   Connected network
+   ========================================= */
+
+row.connected {
+    background-color: #42152a;
+    border-color: #9e3155;
+}
+
+row.connected:hover {
+    background-color: #531a35;
+}
+
+/* =========================================
+   Signal percentage
+   ========================================= */
+
+row label:last-child {
+    color: #c47a94;
+}
+
+row.connected label:last-child {
+    color: #f5d9e2;
+}
+
+/* =========================================
+   Scrollbar
+   ========================================= */
+
+scrollbar slider {
+    background-color: #6e1f3a;
+    border-radius: 10px;
+}
+
+scrollbar slider:hover {
+    background-color: #a52e58;
+}
+
+/* =========================================
+   Dialog
+   ========================================= */
+
+dialog {
+    background-color: #16080e;
+    color: #f5d9e2;
+}
+
+dialog entry {
+    background-color: #241019;
+    color: #f5d9e2;
+
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+
+    padding: 9px;
+}
+
+dialog entry:focus {
+    border-color: #b8325d;
+}
+
+/* =========================================
+   Selection / focus
+   ========================================= */
+
+*:focus {
+    outline: 2px solid #8f294c;
+    outline-offset: 2px;
+}
+
+/* =========================================
+   In-window password prompt
+   ========================================= */
+
+.password-box {
+    background-color: #241019;
+
+    border: 1px solid #6e1f3a;
+    border-radius: 14px;
+
+    padding: 14px;
+    margin-top: 8px;
+}
+
+.password-title {
+    color: #f5d9e2;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.password-entry {
+    background-color: #16080e;
+    color: #f5d9e2;
+
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+
+    padding: 10px;
+}
+
+.password-entry:focus {
+    border-color: #b8325d;
+    box-shadow: 0 0 0 1px #6e1f3a;
+}
+
+.password-cancel,
+.password-connect {
+    border-radius: 9px;
+    padding: 7px 14px;
+}
+
+.password-cancel {
+    background-color: #21101a;
+    color: #c47a94;
+}
+
+.password-connect {
+    background-color: #6e1f3a;
+    color: #ffffff;
+
+    border-color: #b8325d;
+}
+
+.password-connect:hover {
+    background-color: #8f294c;
+}
