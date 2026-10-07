@@ -7,8 +7,10 @@ window {
     background-color: #16080e;
     color: #f5d9e2;
 
-    border: 1px solid #4b1729;
-    border-radius: 18px;
+    border: 1px solid #6e1f3a;
+    border-radius: 16px;
+
+    padding: 0;
 }
 
 /* Main container */
@@ -201,4 +203,29 @@ dialog entry:focus {
 
 .password-connect:hover {
     background-color: #8f294c;
+}
+
+/* Password entry - remove GTK blue focus/hover */
+.password-entry {
+    background-color: #16080e;
+    color: #f5d9e2;
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: none;
+    outline: none;
+}
+
+.password-entry:hover {
+    background-color: #16080e;
+    border-color: #6e1f3a;
+}
+
+.password-entry:focus {
+    background-color: #16080e;
+    color: #f5d9e2;
+    border-color: #b8325d;
+    box-shadow: none;
+    outline: 2px solid #6e1f3a;
+    outline-offset: -1px;
 }

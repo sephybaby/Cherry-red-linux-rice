@@ -11,227 +11,257 @@ gi.require_version("Gtk", "4.0")
 IFACE = "wlan0"
 
 
-# =========================================================
-# Helpers
-# =========================================================
-
-def run(cmd):
+def run(command):
     try:
-        return subprocess.check_output(
-            cmd,
+        result = subprocess.run(
+            command,
             shell=True,
-            text=True,
-            stderr=subprocess.DEVNULL
-        ).strip()
-    except subprocess.CalledProcessError:
+            capture_output=True,
+            text=True
+        )
+
+        return result.stdout
+
+    except Exception:
         return ""
 
 
 def get_connected():
-    output = run(f"iwctl station {IFACE} show")
 
-    match = re.search(
-        r"Connected network\s+(.+)",
-        output
+    output = run(
+        f"iwctl station {IFACE} show"
     )
-
-    return match.group(1).strip() if match else ""
-
-
-def get_networks():
-    output = run(f"iw dev {IFACE} scan")
-
-    networks = []
-    current_signal = None
 
     for line in output.splitlines():
 
-        signal = re.search(
-            r"signal:\s*(-?\d+(?:\.\d+)?)",
-            line
+        if "Connected network" in line:
+
+            name = line.split(
+                "Connected network",
+                1
+            )[1].strip()
+
+            return name
+
+    return None
+
+
+def get_networks():
+
+    output = run(
+        f"iwctl station {IFACE} get-networks"
+    )
+
+    # Remove ANSI terminal colour/control sequences
+    output = re.sub(
+        r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])',
+        '',
+        output
+    )
+
+    networks = []
+
+    for line in output.splitlines():
+
+        line = line.rstrip()
+
+        if not line.strip():
+            continue
+
+        # Skip table headers
+        if (
+            "Available networks" in line
+            or "Network name" in line
+            or line.strip().startswith("---")
+        ):
+            continue
+
+        # Connected network has a > marker
+        connected = line.lstrip().startswith(">")
+
+        if connected:
+            line = line.lstrip()[1:].lstrip()
+
+        # iwd separates columns using multiple spaces
+        parts = re.split(
+            r"\s{2,}",
+            line.strip()
         )
 
-        if signal:
-            current_signal = float(signal.group(1))
+        if len(parts) < 3:
+            continue
 
-        ssid = re.search(
-            r"SSID:\s*(.*)",
-            line
+        name = parts[0].strip()
+        security = parts[1].strip()
+        signal = parts[2].strip()
+
+        if not name:
+            continue
+
+        # iwd hides signal strength as ****
+        # Connected network gets full strength for now
+        percent = 100 if connected else 0
+
+        networks.append(
+            (name, percent)
         )
 
-        if ssid and current_signal is not None:
-
-            name = ssid.group(1).strip()
-
-            if not name:
-                continue
-
-            percent = int(
-                (current_signal + 90) * 100 / 60
-            )
-
-            percent = max(
-                0,
-                min(100, percent)
-            )
-
-            networks.append(
-                (name, percent)
-            )
-
-    # Remove duplicate SSIDs.
+    # Remove duplicates
     result = {}
 
     for name, percent in networks:
 
-        if (
-            name not in result
-            or percent > result[name]
-        ):
+        if name not in result:
             result[name] = percent
 
-    return sorted(
-        result.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    return list(result.items())
 
-
-# =========================================================
-# Wi-Fi Window
-# =========================================================
 
 class WifiWindow(Gtk.Window):
 
     def __init__(self, app):
 
         super().__init__(
-            application=app,
-            title="Wi-Fi"
+            application=app
+        )
+
+        self.app = app
+
+        self.set_title(
+            "Wi-Fi"
         )
 
         self.set_default_size(
-            620,
-            520
+            420,
+            480
         )
 
-        self.build_ui()
+        self.set_resizable(
+            False
+        )
 
-        self.refresh()
+        self.set_decorated(
+            False
+        )
 
-    # =====================================================
-    # UI
-    # =====================================================
+        self.set_modal(
+            True
+        )
 
-    def build_ui(self):
+        self.set_hide_on_close(
+            True
+        )
 
+        # Main container
         self.box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=10
         )
 
-        self.box.set_margin_top(18)
-        self.box.set_margin_bottom(18)
-        self.box.set_margin_start(18)
-        self.box.set_margin_end(18)
+        self.box.set_margin_top(14)
+        self.box.set_margin_bottom(14)
+        self.box.set_margin_start(14)
+        self.box.set_margin_end(14)
 
-        self.set_child(self.box)
+        self.set_child(
+            self.box
+        )
 
-        # -------------------------------------------------
         # Header
-        # -------------------------------------------------
-
         header = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=10
+            spacing=8
         )
 
         title = Gtk.Label(
             label="Wi-Fi"
         )
 
-        title.set_markup(
-            "<span size='large' weight='bold'>Wi-Fi</span>"
-        )
-
         title.set_xalign(0)
+
+        title.set_hexpand(True)
+
+        title.set_markup(
+            "<b>Wi-Fi</b>"
+        )
 
         header.append(title)
 
         refresh = Gtk.Button(
-            label="↻ Refresh"
+            label="↻"
+        )
+
+        refresh.set_tooltip_text(
+            "Refresh networks"
         )
 
         refresh.connect(
             "clicked",
-            lambda _: self.refresh()
+            lambda _:
+                self.refresh()
         )
 
         header.append(refresh)
 
-        self.box.append(header)
-
-        # -------------------------------------------------
-        # Current connection
-        # -------------------------------------------------
-
-        self.current = Gtk.Label()
-
-        self.current.set_xalign(0)
-
         self.box.append(
-            self.current
+            header
         )
 
-        # -------------------------------------------------
-        # Separator
-        # -------------------------------------------------
+        # Connected network label
+        self.connected_label = Gtk.Label()
+
+        self.connected_label.set_xalign(0)
 
         self.box.append(
-            Gtk.Separator(
-                orientation=Gtk.Orientation.HORIZONTAL
-            )
+            self.connected_label
         )
 
-        # -------------------------------------------------
-        # Network list
-        # -------------------------------------------------
+        # Scrolled network list
+        self.scrolled = Gtk.ScrolledWindow()
 
-        self.listbox = Gtk.ListBox()
+        self.scrolled.set_vexpand(
+            True
+        )
 
-        self.listbox.set_selection_mode(
+        self.scrolled.set_policy(
+            Gtk.PolicyType.NEVER,
+            Gtk.PolicyType.AUTOMATIC
+        )
+
+        self.list_box = Gtk.ListBox()
+
+        self.list_box.set_selection_mode(
             Gtk.SelectionMode.NONE
         )
 
-        self.box.append(
-            self.listbox
+        self.scrolled.set_child(
+            self.list_box
         )
 
-    # =====================================================
-    # List handling
-    # =====================================================
+        self.box.append(
+            self.scrolled
+        )
+
+        self.password_box = None
+        self.password_entry = None
+
+        self.refresh()
 
     def clear_list(self):
 
-        child = self.listbox.get_first_child()
+        child = self.list_box.get_first_child()
 
         while child:
 
             next_child = child.get_next_sibling()
 
-            self.listbox.remove(child)
+            self.list_box.remove(
+                child
+            )
 
             child = next_child
 
-    # =====================================================
-    # Refresh
-    # =====================================================
-
     def refresh(self):
-
-        self.current.set_text(
-            "Scanning for networks..."
-        )
 
         self.clear_list()
 
@@ -239,49 +269,29 @@ class WifiWindow(Gtk.Window):
 
         if connected:
 
-            self.current.set_markup(
-                f"<b>Connected:</b> "
-                f"{GLib.markup_escape_text(connected)}"
+            self.connected_label.set_markup(
+                f"<b>Connected:</b> {connected}"
             )
 
         else:
 
-            self.current.set_text(
+            self.connected_label.set_text(
                 "Not connected"
             )
 
-        # Let GTK update the UI before
-        # the scan starts.
-
-        GLib.timeout_add(
-            100,
-            self.finish_scan,
-            connected
-        )
-
-    def finish_scan(self, connected):
-
         networks = get_networks()
-
-        self.clear_list()
 
         for name, percent in networks:
 
-            row = self.create_row(
+            self.add_network(
                 name,
                 percent,
-                connected
+                name == connected
             )
-
-            self.listbox.append(row)
 
         return False
 
-    # =====================================================
-    # Network row
-    # =====================================================
-
-    def create_row(
+    def add_network(
         self,
         name,
         percent,
@@ -290,109 +300,110 @@ class WifiWindow(Gtk.Window):
 
         row = Gtk.ListBoxRow()
 
-        container = Gtk.Box(
+        row.add_css_class(
+            "wifi-row"
+        )
+
+        if connected:
+
+            row.add_css_class(
+                "connected"
+            )
+
+        button = Gtk.Button()
+
+        button.set_has_frame(
+            False
+        )
+
+        button.set_hexpand(
+            True
+        )
+
+        button.connect(
+            "clicked",
+            lambda _,
+            n=name:
+                self.network_clicked(n)
+        )
+
+        content = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=12
+            spacing=10
         )
 
-        container.set_margin_top(10)
-        container.set_margin_bottom(10)
-        container.set_margin_start(12)
-        container.set_margin_end(12)
+        content.set_margin_top(9)
+        content.set_margin_bottom(9)
+        content.set_margin_start(10)
+        content.set_margin_end(10)
 
-        # -------------------------------------------------
         # Wi-Fi icon
-        # -------------------------------------------------
-
         icon = Gtk.Label(
-            label="󰖩"
+            label=""
         )
 
-        container.append(icon)
+        icon.set_width_chars(
+            2
+        )
 
-        # -------------------------------------------------
+        content.append(
+            icon
+        )
+
         # Network name
-        # -------------------------------------------------
-
-        label = Gtk.Label()
+        label = Gtk.Label(
+            label=name
+        )
 
         label.set_xalign(0)
 
-        safe_name = GLib.markup_escape_text(
-            name
+        label.set_hexpand(
+            True
         )
 
-        if name == connected:
+        label.set_ellipsize(
+            3
+        )
 
-            label.set_markup(
-                f"<b>{safe_name}</b>  "
-                f"<span foreground='#7ddc8b'>"
-                f"✓ Connected"
-                f"</span>"
+        content.append(
+            label
+        )
+
+        # Connected indicator
+        if connected:
+
+            status = Gtk.Label(
+                label="✓"
             )
 
-        else:
-
-            label.set_markup(
-                f"<b>{safe_name}</b>"
+            status.add_css_class(
+                "connected-check"
             )
 
-        container.append(label)
+            content.append(
+                status
+            )
 
-        # -------------------------------------------------
-        # Signal
-        # -------------------------------------------------
-
-        signal = Gtk.Label(
-            label=f"{percent}%"
+        button.set_child(
+            content
         )
-
-        signal.set_hexpand(True)
-
-        signal.set_halign(
-            Gtk.Align.END
-        )
-
-        container.append(signal)
 
         row.set_child(
-            container
+            button
         )
 
-        # -------------------------------------------------
-        # Click handler
-        # -------------------------------------------------
-
-        gesture = Gtk.GestureClick()
-
-        gesture.connect(
-            "released",
-            lambda *_,
-            n=name,
-            c=connected:
-                self.connect_network(
-                    n,
-                    c
-                )
+        self.list_box.append(
+            row
         )
 
-        row.add_controller(
-            gesture
-        )
-
-        return row
-
-    # =====================================================
-    # Connect
-    # =====================================================
-
-    def connect_network(
+    def network_clicked(
         self,
-        name,
-        connected
+        name
     ):
 
-        if name == connected:
+        connected = get_connected()
+
+        if connected == name:
 
             subprocess.Popen([
                 "notify-send",
@@ -406,21 +417,20 @@ class WifiWindow(Gtk.Window):
             name
         )
 
-    # =====================================================
-    # Password prompt
-    # =====================================================
-
     def show_password_prompt(
         self,
         name
     ):
 
-        if hasattr(
-            self,
-            "password_box"
-        ):
+        if self.password_box:
 
-            self.password_box.unparent()
+            try:
+                self.password_box.unparent()
+
+            except Exception:
+                pass
+
+            self.password_box = None
 
         self.password_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
@@ -430,10 +440,6 @@ class WifiWindow(Gtk.Window):
         self.password_box.add_css_class(
             "password-box"
         )
-
-        # -------------------------------------------------
-        # Title
-        # -------------------------------------------------
 
         title = Gtk.Label(
             label=f"Password for {name}"
@@ -445,27 +451,31 @@ class WifiWindow(Gtk.Window):
 
         title.set_xalign(0)
 
-        # -------------------------------------------------
-        # Password entry
-        # -------------------------------------------------
+        self.password_box.append(
+            title
+        )
 
-        self.password_entry = Gtk.PasswordEntry()
+        self.password_entry = Gtk.Entry()
 
         self.password_entry.set_placeholder_text(
             "Enter password..."
         )
 
-        self.password_entry.set_show_peek_icon(
-            True
+        self.password_entry.set_visibility(
+            False
+        )
+
+        self.password_entry.set_input_purpose(
+            Gtk.InputPurpose.PASSWORD
         )
 
         self.password_entry.add_css_class(
             "password-entry"
         )
 
-        # -------------------------------------------------
-        # Buttons
-        # -------------------------------------------------
+        self.password_box.append(
+            self.password_entry
+        )
 
         buttons = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -504,19 +514,12 @@ class WifiWindow(Gtk.Window):
                 self.do_connect(name)
         )
 
-        buttons.append(cancel)
-        buttons.append(connect)
-
-        # -------------------------------------------------
-        # Assemble password box
-        # -------------------------------------------------
-
-        self.password_box.append(
-            title
+        buttons.append(
+            cancel
         )
 
-        self.password_box.append(
-            self.password_entry
+        buttons.append(
+            connect
         )
 
         self.password_box.append(
@@ -529,80 +532,105 @@ class WifiWindow(Gtk.Window):
 
         self.password_entry.grab_focus()
 
-    # =====================================================
-    # Hide password prompt
-    # =====================================================
-
     def hide_password_prompt(self):
 
-        if hasattr(
-            self,
-            "password_box"
-        ):
+        if self.password_box:
 
-            self.password_box.unparent()
+            try:
+                self.password_box.unparent()
 
-            del self.password_box
+            except Exception:
+                pass
 
-    # =====================================================
-    # Actually connect
-    # =====================================================
+            self.password_box = None
+            self.password_entry = None
 
     def do_connect(
         self,
         name
     ):
 
-        password = self.password_entry.get_text()
+        if not self.password_entry:
+            return
+
+        password = (
+            self.password_entry
+            .get_text()
+            .strip()
+        )
 
         if not password:
-
             return
 
         self.hide_password_prompt()
 
-        result = subprocess.run([
-            "iwctl",
-            "--passphrase",
-            password,
-            "station",
-            IFACE,
-            "connect",
-            name
-        ])
+        try:
 
-        if result.returncode == 0:
-
-            subprocess.Popen([
-                "notify-send",
-                "Wi-Fi",
-                f"Connected to {name}"
-            ])
-
-            GLib.timeout_add(
-                500,
-                self.refresh
+            result = subprocess.run(
+                [
+                    "iwctl",
+                    "--passphrase",
+                    password,
+                    "station",
+                    IFACE,
+                    "connect",
+                    name
+                ],
+                capture_output=True,
+                text=True
             )
 
-        else:
+            if result.returncode == 0:
+
+                subprocess.Popen([
+                    "notify-send",
+                    "Wi-Fi",
+                    f"Connected to {name}"
+                ])
+
+                GLib.timeout_add(
+                    1000,
+                    self.refresh
+                )
+
+            else:
+
+                error = (
+                    result.stderr.strip()
+                    or result.stdout.strip()
+                    or "Connection failed"
+                )
+
+                subprocess.Popen([
+                    "notify-send",
+                    "Wi-Fi",
+                    f"Failed to connect to {name}: {error}"
+                ])
+
+                GLib.timeout_add(
+                    500,
+                    lambda:
+                        self.show_password_prompt(
+                            name
+                        )
+                        or False
+                )
+
+        except Exception as e:
 
             subprocess.Popen([
                 "notify-send",
                 "Wi-Fi",
-                f"Failed to connect to {name}"
+                f"Wi-Fi error: {e}"
             ])
 
-
-# =========================================================
-# Application
-# =========================================================
 
 class WifiApp(Gtk.Application):
 
     def __init__(self):
 
         super().__init__(
-            application_id="local.sephy.Wifi"
+            application_id="local.waybar.Wifi"
         )
 
     def do_activate(self):
@@ -614,9 +642,9 @@ class WifiApp(Gtk.Application):
         window.present()
 
 
-# =========================================================
+# =========================================
 # CSS
-# =========================================================
+# =========================================
 
 css = Gtk.CssProvider()
 
@@ -626,17 +654,20 @@ css.load_from_path(
     )
 )
 
+display = Gdk.Display.get_default()
 
-Gtk.StyleContext.add_provider_for_display(
-    Gdk.Display.get_default(),
-    css,
-    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-)
+if display:
+
+    Gtk.StyleContext.add_provider_for_display(
+        display,
+        css,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+    )
 
 
-# =========================================================
-# Run
-# =========================================================
+# =========================================
+# Start
+# =========================================
 
 app = WifiApp()
 
