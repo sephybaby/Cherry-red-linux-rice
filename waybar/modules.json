@@ -30,8 +30,7 @@
     "tooltip-format-ethernet": "IP: {ipaddr}\nup: {bandwidthUpBits} down: {bandwidthDownBits}",
     "tooltip-format-disconnected": "Disconnected",
     "max-length": 50,
-	"on-click": "exec ~/.config/rofi/scripts/rofi-wifi.sh"
-	
+	"on-click": "bash -c 'python ~/.config/waybar/wifi/wifi.py & echo $! > /tmp/waybar-wifi.pid; wait'"
   },
   "battery": {
     "interval": 1,
