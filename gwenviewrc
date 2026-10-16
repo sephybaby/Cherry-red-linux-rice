@@ -1,0 +1,15 @@
+[General]
+LastUsedVersion=210800
+SideBarPage=operations
+
+[MainWindow]
+MenuBar=Disabled
+
+[Recent Files]
+File1[$e]=$HOME/Downloads/IMG_20260105_193416.jpg
+Name1[$e]=IMG_20260105_193416.jpg
+
+[SideBar]
+InformationSplitterSizes=0,0
+IsVisible ViewMode=true
+SideBarSplitterSizes=244,665
