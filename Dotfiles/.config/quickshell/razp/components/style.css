@@ -1,0 +1,303 @@
+/* =========================================================
+   Wi-Fi + Bluetooth popups: dark cherry
+   GTK3 CSS, shared by wifi.py and bluetooth.py
+
+   card      #1a0409   row        #2a0812   row hover  #3d0c1b
+   connected #531226   border     #4a1022   accent     #8f142b
+   bright    #c2203f   pink       #ffb8c8   text       #ffe8ee
+   muted     #a96b7b   error      #ff8da4
+   ========================================================= */
+
+* {
+    font-family: "InconsolataGo Nerd Font", "InconsolataGo", "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: #ffe8ee;
+    text-shadow: none;
+    box-shadow: none;
+    outline-style: none;
+}
+
+/* Transparent toplevel, the card draws the rounded shape */
+window {
+    background-color: transparent;
+}
+
+.portal-card {
+    background-color: #1a0409;
+    border: 1px solid #5a1226;
+    border-radius: 18px;
+    padding: 18px;
+}
+
+.portal-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #ffb8c8;
+}
+
+.hint {
+    color: #7a4a58;
+    font-size: 11px;
+}
+
+/* ---------- Buttons ---------- */
+
+button {
+    background-image: none;
+    background-color: #2a0812;
+    color: #ffb8c8;
+    border: 1px solid #4a1022;
+    border-radius: 10px;
+    padding: 6px 12px;
+    transition: 150ms ease-in-out;
+}
+
+button:hover {
+    background-color: #3d0c1b;
+    border-color: #8f142b;
+}
+
+button:active {
+    background-color: #6e0c1c;
+}
+
+button:disabled {
+    background-color: #1f060c;
+    color: #6b3a47;
+}
+
+.icon-btn {
+    padding: 3px 10px;
+    font-size: 15px;
+}
+
+/* small text buttons inside rows (forget / disconnect) */
+.row-action {
+    background-color: transparent;
+    color: #c9909e;
+    border: 1px solid #4a1022;
+    border-radius: 8px;
+    padding: 2px 9px;
+    font-size: 11px;
+}
+
+.row-action:hover {
+    background-color: #4a0a19;
+    border-color: #c2203f;
+    color: #ffb8c8;
+}
+
+/* ---------- Status banner ---------- */
+
+.status-box {
+    background-color: #230710;
+    border: 1px solid #3a0d1b;
+    border-radius: 12px;
+    padding: 9px 12px;
+}
+
+.status-label {
+    color: #c9909e;
+    font-size: 12px;
+}
+
+.status-box.ok {
+    background-color: #3a0b1b;
+    border-color: #8f142b;
+}
+
+.status-box.ok .status-label {
+    color: #ffb8c8;
+}
+
+/* connection problems show up here, loud on purpose */
+.status-box.error {
+    background-color: #4a0a19;
+    border-color: #d12a4d;
+}
+
+.status-box.error .status-label {
+    color: #ff8da4;
+    font-weight: bold;
+}
+
+spinner {
+    color: #ffb8c8;
+}
+
+/* ---------- List ---------- */
+
+scrolledwindow {
+    background-color: transparent;
+    border: none;
+}
+
+list {
+    background-color: transparent;
+}
+
+row {
+    background-color: #2a0812;
+    border: 1px solid #3a0d1b;
+    border-radius: 12px;
+    margin: 3px 0;
+    padding: 10px 12px;
+    transition: 150ms ease-in-out;
+}
+
+row:hover {
+    background-color: #3d0c1b;
+    border-color: #6e1f3a;
+}
+
+row:selected {
+    background-color: #3d0c1b;
+}
+
+row.connected {
+    background-color: #531226;
+    border-color: #a8324a;
+}
+
+row.connected:hover {
+    background-color: #65172f;
+}
+
+row .name {
+    color: #ffe8ee;
+}
+
+row.connected .name {
+    color: #ffb8c8;
+    font-weight: bold;
+}
+
+row .meta {
+    color: #a96b7b;
+    font-size: 11px;
+}
+
+row .signal {
+    color: #ff4d6d;
+    font-size: 14px;
+}
+
+/* ---------- Scrollbar ---------- */
+
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar trough {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    min-width: 4px;
+    min-height: 30px;
+    background-color: #6e1f3a;
+    border: none;
+    border-radius: 10px;
+}
+
+scrollbar slider:hover {
+    background-color: #a52e58;
+}
+
+/* ---------- Bluetooth power switch ---------- */
+
+switch {
+    background-color: #2a0812;
+    border: 1px solid #4a1022;
+    border-radius: 14px;
+    min-width: 46px;
+    min-height: 24px;
+    color: transparent;
+}
+
+switch slider {
+    background-image: none;
+    background-color: #a96b7b;
+    border: none;
+    border-radius: 12px;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 1px;
+}
+
+switch:checked {
+    background-color: #8f142b;
+    border-color: #c2203f;
+}
+
+switch:checked slider {
+    background-color: #ffe8ee;
+}
+
+/* ---------- Password prompt (Wi-Fi) ---------- */
+
+.password-box {
+    background-color: #241019;
+    border: 1px solid #6e1f3a;
+    border-radius: 14px;
+    padding: 14px;
+    margin-top: 8px;
+}
+
+.password-title {
+    color: #ffb8c8;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+entry,
+.password-entry {
+    background-image: none;
+    background-color: #16080e;
+    color: #ffe8ee;
+    caret-color: #ffb8c8;
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+entry:hover,
+.password-entry:hover {
+    background-color: #16080e;
+    border-color: #6e1f3a;
+}
+
+entry:focus,
+.password-entry:focus {
+    background-color: #16080e;
+    border-color: #b8325d;
+}
+
+entry selection,
+.password-entry selection {
+    background-color: #8f142b;
+    color: #ffffff;
+}
+
+.password-cancel,
+.password-connect {
+    border-radius: 9px;
+    padding: 7px 14px;
+}
+
+.password-cancel {
+    background-color: #21101a;
+    color: #c47a94;
+}
+
+.password-connect {
+    background-color: #6e1f3a;
+    border-color: #b8325d;
+    color: #ffffff;
+}
+
+.password-connect:hover {
+    background-color: #8f294c;
+}

@@ -107,7 +107,7 @@ configuration {
 }
 
 window {
-    background-color: #160B10;
+    background-color: #2b0308;
     border: 2px;
     border-color: #360613;
     border-radius: 12px;

@@ -1,9 +1,0 @@
-[ExtractDialog]
-1900x1080 screen: Window-Maximized=true
-
-[General]
-LockSidebar=true
-ShowSidebar=true
-
-[MainWindow]
-StatusBar=Disabled
