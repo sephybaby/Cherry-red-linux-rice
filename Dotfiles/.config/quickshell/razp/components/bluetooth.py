@@ -1,63 +1,71 @@
 #!/usr/bin/env python3
-"""Bluetooth popup (bluez / bluetoothctl). Opened by clicking the Bluetooth card."""
+"""Bluetooth popup. Reads BlueZ over D-Bus (instant); bluetoothctl only pairs new devices."""
 import re
 import time
 
 import portal_common as pc
-from portal_common import Gtk, Pango
+from portal_common import GLib, Gtk, Pango
 
-DEVICE_LINE = re.compile(r"^Device\s+((?:[0-9A-F]{2}:){5}[0-9A-F]{2})\s+(.*)$", re.I | re.M)
+BLUEZ = "org.bluez"
+ADAPTER_IF = "org.bluez.Adapter1"
+DEVICE_IF = "org.bluez.Device1"
+
 UNNAMED = re.compile(r"^(?:[0-9A-F]{2}[-:]){5}[0-9A-F]{2}$", re.I)
-MAX_DEVICES = 30
 
 
 # --------------------------------------------------------------------------
-# bluetoothctl helpers
+# BlueZ helpers
 # --------------------------------------------------------------------------
-def bt(*args, timeout=15):
-    return pc.run(["bluetoothctl"] + list(args), timeout)
+def adapter_path(objs):
+    return next((p for p, ifaces in objs.items() if ADAPTER_IF in ifaces), None)
 
 
-def device_info(mac):
-    _, out = bt("info", mac)
-
-    def field(name):
-        match = re.search(r"^\s*%s:\s*(.+)$" % name, out, re.M)
-        return match.group(1).strip() if match else ""
-
-    rssi = re.search(r"RSSI:.*\((-?\d+)\)", out)
-    return {
-        "mac": mac,
-        "name": field("Alias") or field("Name") or mac,
-        "paired": field("Paired") == "yes",
-        "connected": field("Connected") == "yes",
-        "icon": field("Icon"),
-        "rssi": int(rssi.group(1)) if rssi else -999,
-    }
+def blocked_by_rfkill():
+    _, out = pc.run(["rfkill", "list", "bluetooth"], 5)
+    return re.search(r"(Soft|Hard) blocked:\s*yes", out) is not None
 
 
 def fetch():
-    """-> {"error": str} | {"powered": False} | {"powered": True, "devices": [...]}"""
-    rc, out = bt("show")
-    if rc == 127:
-        return {"error": "bluetoothctl is not installed (package: bluez-utils)."}
-    if rc != 0 or "no default controller" in out.lower():
-        _, rf = pc.run(["rfkill", "list", "bluetooth"], 5)
-        if re.search(r"(Soft|Hard) blocked:\s*yes", rf):
-            return {"powered": False, "devices": [], "blocked": True}
+    """-> {"error": str} | {"powered": False, ...} | {"powered": True, "devices": [...]}"""
+    try:
+        objs = pc.managed_objects(BLUEZ)
+    except GLib.Error as exc:
+        return {"error": "Can't reach BlueZ (%s). Is bluetooth.service running?"
+                         % pc.error_text(exc)}
+    adapter = adapter_path(objs)
+    if adapter is None:
+        if blocked_by_rfkill():
+            return {"powered": False, "devices": [], "blocked": True, "adapter": None}
         return {"error": "No Bluetooth adapter found. Is bluetooth.service running? "
                          "(systemctl status bluetooth)"}
-    if not re.search(r"Powered:\s*yes", out):
-        return {"powered": False, "devices": []}
+    if not objs[adapter][ADAPTER_IF].get("Powered"):
+        return {"powered": False, "devices": [], "adapter": adapter}
 
-    _, out = bt("devices")
     devices = []
-    for mac, _name in DEVICE_LINE.findall(out)[:MAX_DEVICES]:
-        info = device_info(mac)
-        if not info["paired"] and UNNAMED.match(info["name"]):
-            continue  # nameless random devices are just noise
-        devices.append(info)
-    return {"powered": True, "devices": devices}
+    for path, ifaces in objs.items():
+        props = ifaces.get(DEVICE_IF)
+        if not props or not path.startswith(adapter + "/"):
+            continue
+        name = props.get("Alias") or props.get("Name") or props.get("Address", "")
+        paired = bool(props.get("Paired"))
+        rssi = props.get("RSSI")
+        # skip nameless noise and stale unpaired devices that are no longer in range
+        if not paired and (UNNAMED.match(name) or rssi is None):
+            continue
+        devices.append({
+            "path": path,
+            "mac": props.get("Address", ""),
+            "name": name,
+            "paired": paired,
+            "connected": bool(props.get("Connected")),
+            "icon": props.get("Icon", ""),
+            "rssi": rssi if rssi is not None else -999,
+        })
+    return {"powered": True, "devices": devices, "adapter": adapter}
+
+
+def bt(*args, timeout=15):
+    return pc.run(["bluetoothctl"] + list(args), timeout)
 
 
 def glyph(icon):
@@ -78,12 +86,14 @@ def explain_failure(out, name, verb):
     low = out.lower()
     if "blocked" in low:
         return "Bluetooth is blocked by rfkill. Run: rfkill unblock bluetooth"
-    if "not available" in low or "does not exist" in low:
+    if "not available" in low or "does not exist" in low or "notavailable" in low:
         return "%s isn't available. Turn it on, put it in pairing mode and refresh." % name
     if "authentication" in low:
         return "Pairing with %s was rejected. Put it in pairing mode and try again." % name
-    if "timed out" in low:
+    if "timed out" in low or "timeout" in low:
         return "%s didn't answer in time. Move closer and try again." % name
+    if "inprogress" in low or "in progress" in low:
+        return "Bluetooth is busy. Wait a moment and try again."
     detail = out.splitlines()[-1].strip() if out.strip() else ""
     return "Could not %s %s%s." % (verb, name, " (%s)" % detail if detail else "")
 
@@ -95,15 +105,10 @@ class BluetoothPortal(pc.Portal):
     def __init__(self):
         super().__init__("bluetooth", "Bluetooth")
         self.devices = []
-        self._updating = False
+        self.adapter = None
         self._power_busy = False
-        self.hint.set_text("Click a device to connect or disconnect")
-
-        self.switch = Gtk.Switch()
-        self.switch.set_valign(Gtk.Align.CENTER)
-        self.switch.connect("notify::active", self._on_switch)
-        self.header.pack_end(self.switch, False, False, 0)
-
+        self.hint.set_text("Press connect, or click a device")
+        self.add_power_switch(self._on_power)
         self.listbox.connect("row-activated", self._on_row)
         self.refresh()
 
@@ -130,7 +135,20 @@ class BluetoothPortal(pc.Portal):
         self.ui(self._show, gen, data, state)
         if not do_scan:
             return
-        bt("--timeout", "8", "scan", "on", timeout=20)
+        adapter = data["adapter"]
+        try:
+            pc.dbus_call(BLUEZ, adapter, ADAPTER_IF, "StartDiscovery")
+        except GLib.Error:
+            pass  # already discovering is fine
+        for _ in range(8):  # devices stream in as they are found
+            time.sleep(1)
+            if gen != self._gen:
+                break
+            self.ui(self._show, gen, fetch(), "partial")
+        try:
+            pc.dbus_call(BLUEZ, adapter, ADAPTER_IF, "StopDiscovery")
+        except GLib.Error:
+            pass
         self.ui(self._show, gen, fetch(), "final")
 
     def _show(self, gen, data, scan_state):
@@ -140,16 +158,17 @@ class BluetoothPortal(pc.Portal):
             return  # newer refresh (e.g. power toggled) already redrew things
 
         if "error" in data:
-            self._set_switch(False)
+            self.set_switch(False, enabled=False)
             self.devices = []
-            self._rebuild()
+            self._sync([])
             self.set_status(data["error"], "error")
             return
 
         powered = data["powered"]
-        self._set_switch(powered)
+        self.adapter = data.get("adapter") or self.adapter
+        self.set_switch(powered)
         self.devices = data["devices"]
-        self._rebuild()
+        self._sync(self.devices)
         if not self.can_update_status():
             return
 
@@ -169,16 +188,10 @@ class BluetoothPortal(pc.Portal):
             else:
                 self.set_status("No devices found. Put your device in pairing mode and refresh.")
 
-    def _set_switch(self, state):
-        self._updating = True
-        self.switch.set_active(state)
-        self._updating = False
-
     # -- power ---------------------------------------------------------------------
-    def _on_switch(self, switch, _param):
-        if self._updating or self._power_busy:
+    def _on_power(self, want):
+        if self._power_busy:
             return
-        want = switch.get_active()
         self._power_busy = True
         self.pinned = False
         self._gen += 1  # drop scan results that are still on their way
@@ -188,39 +201,48 @@ class BluetoothPortal(pc.Portal):
     def _power_worker(self, want):
         if want:
             pc.run(["rfkill", "unblock", "bluetooth"], 5)
-        out = ""
-        for _ in range(4 if want else 1):  # controller can take a second to reappear
-            _, out = bt("power", "on" if want else "off", timeout=10)
-            if "succeeded" in out.lower() or "no default controller" not in out.lower():
+        message, ok = "", False
+        for _ in range(4 if want else 1):  # the adapter can take a second to reappear
+            try:
+                adapter = adapter_path(pc.managed_objects(BLUEZ))
+                if adapter is None:
+                    message = "No default controller available"
+                    time.sleep(1)
+                    continue
+                pc.dbus_set(BLUEZ, adapter, ADAPTER_IF, "Powered", GLib.Variant("b", want))
+                ok = True
                 break
-            time.sleep(1)
-        self.ui(self._power_done, want, "succeeded" in out.lower(), out)
+            except GLib.Error as exc:
+                message = pc.error_text(exc)
+                break
+        self.ui(self._power_done, want, ok, message)
 
-    def _power_done(self, want, ok, out):
+    def _power_done(self, want, ok, message):
         self._power_busy = False
         if ok:
             self.refresh(scan=want, force=True)
             return
         self.pinned = True
-        self.set_status(explain_failure(out, "Bluetooth", "turn on" if want else "turn off"),
+        self.set_status(explain_failure(message, "Bluetooth", "turn on" if want else "turn off"),
                         "error")
         self.refresh(scan=False)  # snaps the switch back to the real state
 
     # -- rows ------------------------------------------------------------------------
-    def _rebuild(self):
-        self.clear_list()
-        ordered = sorted(
-            self.devices,
-            key=lambda d: (not d["connected"], not d["paired"], -d["rssi"], d["name"].lower()),
+    def _sync(self, devices):
+        self.sync_rows(
+            devices,
+            key=lambda d: d["path"],
+            make_row=self._row,
+            state_of=lambda d: (d["connected"], d["paired"]),
+            update_row=lambda row, dev: setattr(row, "dev", dev),
+            order_of=lambda d: (0 if d["connected"] else 1 if d["paired"] else 2,
+                                -d["rssi"], d["name"].lower()),
         )
-        for dev in ordered:
-            self.listbox.add(self._row(dev))
-        self.listbox.show_all()
 
     def _row(self, dev):
         row = Gtk.ListBoxRow()
         row.dev = dev
-        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.add(box)
         if dev["connected"]:
             row.get_style_context().add_class("connected")
@@ -235,27 +257,30 @@ class BluetoothPortal(pc.Portal):
         name.get_style_context().add_class("name")
         box.pack_start(name, True, True, 0)
 
+        if not dev["paired"]:
+            meta = Gtk.Label(label="new")
+            meta.get_style_context().add_class("meta")
+            box.pack_start(meta, False, False, 0)
+
         if dev["paired"] and not dev["connected"]:
             box.pack_start(
-                self.action_button("forget", lambda d=dev: self._forget(d)), False, False, 0)
-
-        state = "connected" if dev["connected"] else "paired" if dev["paired"] else "new"
-        meta = Gtk.Label(label=state)
-        meta.get_style_context().add_class("meta")
-        box.pack_start(meta, False, False, 0)
+                self.action_button("forget", lambda r=row: self._forget(r.dev)),
+                False, False, 0)
+        if dev["connected"]:
+            box.pack_start(
+                self.action_button("disconnect", lambda r=row: self._toggle(r.dev), primary=True),
+                False, False, 0)
+        else:
+            label = "connect" if dev["paired"] else "pair"
+            box.pack_start(
+                self.action_button(label, lambda r=row: self._toggle(r.dev), primary=True),
+                False, False, 0)
         return row
 
     def _on_row(self, _listbox, row):
         dev = getattr(row, "dev", None)
-        if dev is None or self.busy or self._power_busy:
-            return
-        if dev["connected"]:
-            self._begin("Disconnecting from %s…" % dev["name"])
-            self.bg(self._disconnect_worker, dev)
-        else:
-            verb = "Connecting to" if dev["paired"] else "Pairing with"
-            self._begin("%s %s…" % (verb, dev["name"]))
-            self.bg(self._connect_worker, dev)
+        if dev is not None:
+            self._toggle(dev)
 
     # -- actions ---------------------------------------------------------------------------
     def _begin(self, text):
@@ -269,41 +294,67 @@ class BluetoothPortal(pc.Portal):
         self.set_status(message, "ok" if ok else "error")
         self.refresh(scan=False)
 
+    def _toggle(self, dev):
+        pc.log("clicked: %s (paired=%s connected=%s)" % (dev["name"], dev["paired"], dev["connected"]))
+        if self.busy or self._power_busy:
+            self.set_status("Still working on the last action, one moment…", busy=True)
+            return
+        if dev["connected"]:
+            self._begin("Disconnecting from %s…" % dev["name"])
+            self.bg(self._disconnect_worker, dev)
+        else:
+            verb = "Connecting to" if dev["paired"] else "Pairing with"
+            self._begin("%s %s…" % (verb, dev["name"]))
+            self.bg(self._connect_worker, dev)
+
     def _connect_worker(self, dev):
-        mac, name = dev["mac"], dev["name"]
+        path, mac, name = dev["path"], dev["mac"], dev["name"]
         if not dev["paired"]:
             _, out = bt("pair", mac, timeout=45)
+            pc.log("pair %s -> %r" % (mac, out))
             low = out.lower()
             if "pairing successful" not in low and "already exists" not in low \
                     and "alreadyexists" not in low:
                 self.ui(self._after_action, explain_failure(out, name, "pair with"), False)
                 return
-            bt("trust", mac)
             self.ui(self.set_status, "Connecting to %s…" % name, "info", True)
-        _, out = bt("connect", mac, timeout=30)
-        if device_info(mac)["connected"]:
-            self.ui(self._after_action, "Connected to %s" % name, True)
-        else:
-            self.ui(self._after_action, explain_failure(out, name, "connect to"), False)
+        try:
+            pc.dbus_set(BLUEZ, path, DEVICE_IF, "Trusted", GLib.Variant("b", True))
+        except GLib.Error:
+            pass
+        try:
+            pc.dbus_call(BLUEZ, path, DEVICE_IF, "Connect", timeout=30000)
+        except GLib.Error as exc:
+            pc.log("connect %s failed: %s" % (name, pc.error_text(exc)))
+            self.ui(self._after_action,
+                    explain_failure(pc.error_text(exc), name, "connect to"), False)
+            return
+        self.ui(self._after_action, "Connected to %s" % name, True)
 
     def _disconnect_worker(self, dev):
-        bt("disconnect", dev["mac"], timeout=15)
-        if device_info(dev["mac"])["connected"]:
-            self.ui(self._after_action, "Could not disconnect from %s." % dev["name"], False)
-        else:
-            self.ui(self._after_action, "Disconnected from %s" % dev["name"], True)
+        try:
+            pc.dbus_call(BLUEZ, dev["path"], DEVICE_IF, "Disconnect", timeout=15000)
+        except GLib.Error as exc:
+            self.ui(self._after_action,
+                    explain_failure(pc.error_text(exc), dev["name"], "disconnect from"), False)
+            return
+        self.ui(self._after_action, "Disconnected from %s" % dev["name"], True)
 
     def _forget(self, dev):
-        if self.busy or self._power_busy:
+        if self.busy or self._power_busy or not self.adapter:
             return
         self._begin("Forgetting %s…" % dev["name"])
-        self.bg(self._forget_worker, dev)
+        self.bg(self._forget_worker, dev, self.adapter)
 
-    def _forget_worker(self, dev):
-        _, out = bt("remove", dev["mac"])
-        gone = "removed" in out.lower() or not device_info(dev["mac"])["paired"]
-        self.ui(self._after_action,
-                "Forgot %s" % dev["name"] if gone else "Could not forget %s." % dev["name"], gone)
+    def _forget_worker(self, dev, adapter):
+        try:
+            pc.dbus_call(BLUEZ, adapter, ADAPTER_IF, "RemoveDevice",
+                         GLib.Variant("(o)", (dev["path"],)))
+        except GLib.Error as exc:
+            self.ui(self._after_action,
+                    explain_failure(pc.error_text(exc), dev["name"], "forget"), False)
+            return
+        self.ui(self._after_action, "Forgot %s" % dev["name"], True)
 
 
 if __name__ == "__main__":

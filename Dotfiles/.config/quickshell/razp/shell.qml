@@ -16,7 +16,8 @@ PanelWindow {
 
     WlrLayershell.namespace: "razp-dashboard"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // OnDemand: the dashboard only grabs the keyboard when you click a text field (to-do list)
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
     property color panel: "#f2210207"
     property color surface: "#42030f"
@@ -28,8 +29,19 @@ PanelWindow {
     property color textColor: "#ffe8ee"
     property color hoverColor: "#58101d"
 
-    // Folder holding wifi.py, bluetooth.py, portal_common.py, style.css
-    property string portalDir: Quickshell.shellDir + "/components"
+    // Obsidian folder holding the to-do note (one note per day, named DD-MM-YY.md, is created here)
+    property string todoFolder: "/home/sephy/Obsidian/Uni/System/To-Dos"
+
+    // True while the Wi-Fi or Bluetooth manager window is open: the dashboard steps aside
+    // (it sits on the Overlay layer, so it would cover the window) and comes back on close.
+    property bool toolOpen: wifiTool.running || bluetoothTool.running
+    visible: !toolOpen
+
+    // Command that starts `bin`, or opens a terminal with an install hint if it is missing.
+    function toolCommand(bin, hint) {
+        return ["sh", "-c",
+                "command -v " + bin + " >/dev/null || exec kitty -e sh -c 'echo \"" + hint + "\"; read -r _'; exec " + bin]
+    }
 
     property string currentTime: Qt.formatDateTime(new Date(), "hh:mm AP")
     property string currentDate: Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy")
@@ -45,6 +57,7 @@ PanelWindow {
     property string brightnessState: "Brightness"
     property string profileState: "balanced"
     property string bluetoothState: "Bluetooth"
+    property string bluetoothDevice: "Not connected"
     property string musicStatus: ""
 
     function runProcess(proc) {
@@ -73,6 +86,7 @@ PanelWindow {
 		runProcess(wifiDetailsProcess)
 		runProcess(wifiSpeedProcess)
         runProcess(bluetoothProcess)
+        runProcess(bluetoothDeviceProcess)
         runProcess(batteryProcess)
         runProcess(volumeProcess)
         runProcess(brightnessProcess)
@@ -160,6 +174,11 @@ Process {
         id: bluetoothProcess
         command: ["sh", "-lc", "bluetoothctl show 2>/dev/null | awk -F': ' '/Powered:/ {print $2; exit}'"]
         stdout: StdioCollector { onStreamFinished: root.bluetoothState = text.trim() === "yes" ? "On" : "Off" }
+    }
+    Process {
+        id: bluetoothDeviceProcess
+        command: ["sh", "-lc", "bluetoothctl devices Connected 2>/dev/null | head -n1 | cut -d' ' -f3-"]
+        stdout: StdioCollector { onStreamFinished: root.bluetoothDevice = text.trim() !== "" ? text.trim() : "Not connected" }
     }
     Process {
         id: batteryProcess
@@ -275,6 +294,7 @@ Process {
 
                         Rectangle {
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 230
                             Layout.fillHeight: true
                             radius: 16
                             color: root.surface
@@ -313,28 +333,52 @@ Process {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.runProcess(wifiPortal)
+                                onClicked: root.runProcess(wifiTool)
                             }
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: 112
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 230
                             Layout.fillHeight: true
                             radius: 16
                             color: root.surface
                             border.color: root.borderColor
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 7
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "ᛒ"; color: root.cherry; font.pixelSize: 25 }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "BLUETOOTH"; color: root.muted; font.pixelSize: 8; font.letterSpacing: 1 }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.bluetoothState; color: root.textColor; font.pixelSize: 11 }
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 13
+                                spacing: 5
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "ᛒ"; color: root.cherry; font.pixelSize: 22 }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: "BLUETOOTH"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.bluetoothDevice
+                                            color: root.textColor
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    Text { text: root.bluetoothState; color: root.pink; font.pixelSize: 9 }
+                                }
+                                Rectangle { Layout.fillWidth: true; height: 1; color: root.borderColor }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text { text: "click: devices"; color: root.muted; font.pixelSize: 10 }
+                                    Item { Layout.fillWidth: true }
+                                    Text { text: "right-click: on/off"; color: root.muted; font.pixelSize: 10 }
+                                }
                             }
                             MouseArea {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: mouse => root.runProcess(mouse.button === Qt.RightButton ? bluetoothToggle : bluetoothPortal)
+                                onClicked: mouse => root.runProcess(mouse.button === Qt.RightButton ? bluetoothToggle : bluetoothTool)
                             }
                         }
 
@@ -435,7 +479,7 @@ Process {
                         }
                     }
 
-                    // Bottom row: calendar, four shortcuts, and the dark side band
+                    // Bottom row: calendar on the left, app buttons + to-do on the right
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -452,52 +496,67 @@ Process {
                             borderColor: root.borderColor
                         }
 
-                        GridLayout {
+                        ColumnLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            columns: 2
-                            columnSpacing: 9
-                            rowSpacing: 9
+                            spacing: 10
 
-                            Repeater {
-                                model: [
-                                    { label: "Terminal", icon: ">_", command: "kitty" },
-                                    { label: "Zen", icon: "♡", command: "flatpak run app.zen_browser.zen" },
-                                    { label: "Obsidian", icon: "✧", command: "obsidian" },
-                                    { label: "Files", icon: "▤", command: "thunar || dolphin || xdg-open \"$HOME\"" }
-                                ]
-                                delegate: Rectangle {
-                                    id: appTile
-                                    required property var modelData
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    radius: 13
-                                    color: tileMouse.containsMouse ? root.hoverColor : root.surface
-                                    border.color: root.borderColor
-                                    Column {
-                                        anchors.centerIn: parent
-                                        spacing: 7
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: appTile.modelData.icon; color: root.cherry; font.pixelSize: 24 }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: appTile.modelData.label; color: root.textColor; font.pixelSize: 11 }
-                                    }
-                                    Process { id: launchApp; command: ["sh", "-lc", appTile.modelData.command] }
-                                    MouseArea {
-                                        id: tileMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.runProcess(launchApp)
+                            // App shortcuts (edit label / icon / command here)
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: false      // a nested layout stretches if any child fills, so pin it
+                                Layout.preferredHeight: 48
+                                Layout.maximumHeight: 48
+                                spacing: 9
+
+                                Repeater {
+                                    model: [
+                                        { label: "Terminal", icon: ">_", command: "kitty" },
+                                        { label: "Obsidian", icon: "✧", command: "obsidian" },
+                                        { label: "Files", icon: "▤", command: "thunar || dolphin || xdg-open \"$HOME\"" },
+                                        { label: "Zen", icon: "♡", command: "flatpak run app.zen_browser.zen" }
+                                    ]
+                                    delegate: Rectangle {
+                                        id: appTile
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        radius: 13
+                                        color: tileMouse.containsMouse ? root.hoverColor : root.surface
+                                        border.color: root.borderColor
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 8
+                                            Text { anchors.verticalCenter: parent.verticalCenter; text: appTile.modelData.icon; color: root.cherry; font.pixelSize: 18 }
+                                            Text { anchors.verticalCenter: parent.verticalCenter; text: appTile.modelData.label; color: root.textColor; font.pixelSize: 11 }
+                                        }
+                                        Process { id: launchApp; command: ["sh", "-lc", appTile.modelData.command] }
+                                        MouseArea {
+                                            id: tileMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.runProcess(launchApp)
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        Rectangle {
-                            Layout.preferredWidth: 42
-                            Layout.fillHeight: true
-                            radius: 12
-                            color: "#240309"
-                            border.color: "#300610"
+                            // To-do list stored in your Obsidian vault
+                            TodoCard {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.minimumHeight: 150
+                                folder: root.todoFolder
+                                cherry: root.cherry
+                                pink: root.pink
+                                muted: root.muted
+                                textColor: root.textColor
+                                surface: root.surface
+                                surfaceLight: root.surfaceLight
+                                borderColor: root.borderColor
+                                hoverColor: root.hoverColor
+                            }
                         }
                     }
                 }
@@ -509,9 +568,9 @@ Process {
     Process { id: previousTrack; command: ["playerctl", "previous"] }
     Process { id: toggleTrack; command: ["playerctl", "play-pause"] }
     Process { id: nextTrack; command: ["playerctl", "next"] }
-    // Popups: setsid so they outlive the click; a second click toggles them closed.
-    Process { id: wifiPortal; command: ["sh", "-c", "setsid -f python3 \"" + root.portalDir + "/wifi.py\" >>/tmp/portal-wifi.log 2>&1"] }
-    Process { id: bluetoothPortal; command: ["sh", "-c", "setsid -f python3 \"" + root.portalDir + "/bluetooth.py\" >>/tmp/portal-bluetooth.log 2>&1"] }
+    // Wi-Fi: iwgtk (iwd GUI)   Bluetooth: blueman-manager
+    Process { id: wifiTool; command: root.toolCommand("iwgtk", "iwgtk is not installed. Install it with: yay -S iwgtk") }
+    Process { id: bluetoothTool; command: root.toolCommand("blueman-manager", "blueman is not installed. Install it with: sudo pacman -S blueman") }
     Process { id: bluetoothToggle; command: ["sh", "-lc", "if bluetoothctl show | grep -q 'Powered: yes'; then bluetoothctl power off; else bluetoothctl power on; fi"] }
     Timer { id: brightnessTimer; interval: 50; onTriggered: root.runProcess(brightnessSet) }
     Timer { id: volumeTimer; interval: 50; onTriggered: root.runProcess(volumeSet) }

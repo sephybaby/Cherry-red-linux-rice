@@ -7,13 +7,30 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import traceback
+
+import ctypes
+
+# gtk-layer-shell must be loaded before Gtk/libwayland, otherwise layer surfaces fail.
+for _lib in ("libgtk-layer-shell.so.0", "libgtk-layer-shell.so"):
+    try:
+        ctypes.CDLL(_lib)
+        break
+    except OSError:
+        continue
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402,F401
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # noqa: E402,F401
+
+try:
+    gi.require_version("GtkLayerShell", "0.1")
+    from gi.repository import GtkLayerShell  # noqa: E402
+except (ValueError, ImportError):
+    GtkLayerShell = None
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 CSS_PATH = os.path.join(HERE, "style.css")
@@ -30,6 +47,11 @@ _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
+def log(message):
+    """Goes to /tmp/portal-*.log when started from the dashboard."""
+    print("[%s] %s" % (time.strftime("%H:%M:%S"), message), file=sys.stderr, flush=True)
+
+
 def clean(text):
     """Strip ANSI colour codes that iwctl / bluetoothctl like to emit."""
     return _ANSI.sub("", text or "").replace("\x1b", "").replace("\r", "")
@@ -54,6 +76,30 @@ def run(cmd, timeout=15):
     except FileNotFoundError:
         return 127, "%s: command not found" % cmd[0]
     return proc.returncode, clean(proc.stdout + "\n" + proc.stderr).strip()
+
+
+def dbus_call(service, path, iface, method, params=None, timeout=10000):
+    """Blocking system-bus call. Raises GLib.Error on failure."""
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    return bus.call_sync(service, path, iface, method, params, None,
+                         Gio.DBusCallFlags.NONE, timeout, None)
+
+
+def dbus_set(service, path, iface, prop, value):
+    """Set a D-Bus property; value is a GLib.Variant."""
+    dbus_call(service, path, "org.freedesktop.DBus.Properties", "Set",
+              GLib.Variant("(ssv)", (iface, prop, value)))
+
+
+def managed_objects(service):
+    """{object path: {interface: {property: value}}} in one call."""
+    reply = dbus_call(service, "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects")
+    return reply.unpack()[0]
+
+
+def error_text(exc):
+    message = getattr(exc, "message", "") or str(exc)
+    return re.sub(r"^GDBus\.Error:", "", message)
 
 
 def _unlink(path):
@@ -117,7 +163,7 @@ class Portal(Gtk.Window):
     """Frameless, centred popup: header, status banner, scrolling list,
     an `extra` area for subclasses and a hint line."""
 
-    def __init__(self, kind, title, size=(440, 560)):
+    def __init__(self, kind, title, size=(480, 580)):
         # Becomes the Wayland app-id / X11 class -> use it in Hyprland rules.
         GLib.set_prgname("%s-portal" % kind)
         GLib.set_application_name(title)
@@ -129,14 +175,23 @@ class Portal(Gtk.Window):
         self._gen = 0          # bumped on every refresh; older results are dropped
         self._armed = False
 
+        self._rows = {}        # key -> row, so the list is updated in place
+        self.switch = None
+        self._updating = False
+        self._switch_cb = None
+
         self._load_css()
         self.set_size_request(*size)
         self.set_resizable(False)
         self.set_decorated(False)
-        self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_keep_above(True)
-        self.set_skip_taskbar_hint(True)
-        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        # The dashboard lives on the Overlay layer, so a normal window would be hidden (and
+        # unclickable) behind it. Open on the same layer instead; the newer surface wins.
+        self.layered = self._setup_layer(kind)
+        if not self.layered:
+            self.set_position(Gtk.WindowPosition.CENTER)
+            self.set_keep_above(True)
+            self.set_skip_taskbar_hint(True)
+            self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
 
         # Transparent window so the card's rounded corners show.
         visual = self.get_screen().get_rgba_visual()
@@ -178,6 +233,8 @@ class Portal(Gtk.Window):
         # List -------------------------------------------------------------
         self.listbox = Gtk.ListBox()
         self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.listbox.set_sort_func(
+            lambda a, b: (a.order > b.order) - (a.order < b.order))
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_vexpand(True)
@@ -198,6 +255,54 @@ class Portal(Gtk.Window):
         self.connect("focus-out-event", self._on_focus_out)
         GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, self._on_signal)
         GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, self._on_signal)
+
+    # -- layer shell -----------------------------------------------------------
+    def _setup_layer(self, kind):
+        if GtkLayerShell is None:
+            log("gtk-layer-shell is not installed: the popup will open BEHIND the dashboard. "
+                "Install it (Arch: sudo pacman -S gtk-layer-shell).")
+            return False
+        try:
+            if not GtkLayerShell.is_supported():
+                log("Compositor has no layer-shell support; using a normal window.")
+                return False
+            GtkLayerShell.init_for_window(self)
+            GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+            GtkLayerShell.set_namespace(self, "%s-portal" % kind)
+            if hasattr(GtkLayerShell, "set_keyboard_mode"):
+                GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+            else:
+                GtkLayerShell.set_keyboard_interactivity(self, True)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log("layer-shell setup failed (%s); using a normal window." % exc)
+            return False
+
+    # -- power switch ------------------------------------------------------------
+    def add_power_switch(self, callback):
+        """Visible On/Off switch in the header. callback(bool) runs on user toggles only."""
+        self._switch_cb = callback
+        self.switch = Gtk.Switch()
+        self.switch.set_valign(Gtk.Align.CENTER)
+        self.switch_label = Gtk.Label(label="")
+        self.switch_label.get_style_context().add_class("meta")
+        self.switch.connect("notify::active", self._on_switch_notify)
+        self.header.pack_end(self.switch, False, False, 0)
+        self.header.pack_end(self.switch_label, False, False, 0)
+
+    def set_switch(self, state, enabled=True):
+        """Reflect the real state without triggering the callback."""
+        self._updating = True
+        self.switch.set_active(state)
+        self._updating = False
+        self.switch.set_sensitive(enabled)
+        self.switch_label.set_text("On" if state else "Off")
+
+    def _on_switch_notify(self, switch, _param):
+        if self._updating:
+            return
+        self.switch_label.set_text("On" if switch.get_active() else "Off")
+        self._switch_cb(switch.get_active())
 
     # -- styling -------------------------------------------------------------
     @staticmethod
@@ -240,14 +345,43 @@ class Portal(Gtk.Window):
     def clear_list(self):
         for child in self.listbox.get_children():
             self.listbox.remove(child)
+        self._rows.clear()
+
+    def sync_rows(self, items, key, make_row, state_of, update_row, order_of):
+        """Update the list in place instead of rebuilding it.
+
+        Rows whose state did not change are left alone (only update_row runs), so a
+        button never disappears between your mouse press and release. Order is fixed
+        when a row is created, so rows don't jump around under the cursor either."""
+        wanted = {key(item): item for item in items}
+        for k in list(self._rows):
+            if k not in wanted:
+                self.listbox.remove(self._rows.pop(k))
+        for k, item in wanted.items():
+            row = self._rows.get(k)
+            state = state_of(item)
+            if row is not None and row.state == state:
+                update_row(row, item)
+                continue
+            if row is not None:
+                self.listbox.remove(row)
+            row = make_row(item)
+            row.state = state
+            row.order = order_of(item)
+            self._rows[k] = row
+            self.listbox.add(row)
+            row.show_all()
+        self.listbox.invalidate_sort()
 
     @staticmethod
-    def action_button(label, callback):
+    def action_button(label, callback, primary=False):
         button = Gtk.Button(label=label)
         button.set_relief(Gtk.ReliefStyle.NONE)
         button.set_focus_on_click(False)
         button.set_valign(Gtk.Align.CENTER)
         button.get_style_context().add_class("row-action")
+        if primary:
+            button.get_style_context().add_class("primary")
         button.connect("clicked", lambda *_: callback())
         return button
 

@@ -43,8 +43,8 @@ hl.bind(mainMod .. " + ALT + down", hl.dsp.window.swap({ direction = "d" }), { d
 -- Workspace
 for i = 1, 10 do
 	local key = i % 10
-	hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = i }))            -- Switch workspaces with mainMod + [0-9]
-	hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i })) -- Move active window to a workspace with mainMod + SHIFT + [0-9]
+	hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = i }))          -- Switch workspaces with mainMod + [0-9]
+	hl.bind(mainMod .. " + ALT + " .. key, hl.dsp.window.move({ workspace = i })) -- Move active window to a workspace with mainMod + SHIFT + [0-9]
 end
 --
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }), { description = "Switch to next workspace" })

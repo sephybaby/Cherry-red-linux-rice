@@ -87,6 +87,19 @@ button:disabled {
     color: #ffb8c8;
 }
 
+/* main action on a row: connect / disconnect / pair */
+.row-action.primary {
+    background-color: #8f142b;
+    border-color: #c2203f;
+    color: #ffe8ee;
+    font-weight: bold;
+}
+
+.row-action.primary:hover {
+    background-color: #b01a37;
+    border-color: #ff4d6d;
+}
+
 /* ---------- Status banner ---------- */
 
 .status-box {

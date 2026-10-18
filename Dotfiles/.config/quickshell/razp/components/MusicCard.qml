@@ -136,7 +136,7 @@ Rectangle {
 				id: vinylRecord
 				anchors.fill: parent
 
-				// Vinyl disc
+				// vinyl look
 				Rectangle {
 					anchors.fill: parent
 					radius: width / 2
@@ -145,7 +145,6 @@ Rectangle {
 					border.color: root.borderColor
 				}
 
-				// Circular album artwork
 				Item {
 					id: artworkMask
 					anchors.fill: parent
@@ -185,7 +184,6 @@ Rectangle {
 					}
 				}
 
-				// Vinyl grooves
 				Repeater {
 					model: 3
 
@@ -202,7 +200,6 @@ Rectangle {
 					}
 				}
 
-				// Centre label
 				Rectangle {
 					anchors.centerIn: parent
 					width: 38
@@ -222,7 +219,7 @@ Rectangle {
 				}
 			}
 
-			// One complete rotation every 8 seconds while playing
+			// rotation
 			RotationAnimation {
 				target: vinylRecord
 				from: 0

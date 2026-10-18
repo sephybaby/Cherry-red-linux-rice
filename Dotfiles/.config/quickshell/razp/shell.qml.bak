@@ -85,7 +85,6 @@ Timer {
 
 Component.onCompleted: spotifyMetadata.start()
 
-    // Full-width transparent panel; the card itself stays centered.
     Item {
         anchors.fill: parent
 

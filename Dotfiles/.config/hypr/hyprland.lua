@@ -16,3 +16,12 @@ require("src.controls.inputs")
 require("src.systems.window_rules")
 
 require("src.power") -- goes last
+
+
+hl.window_rule({
+	name = "wifi-bluetooth-popup",
+	match = { class = "^.*(iwgtk|blueman).*$" },
+	float = true,
+	center = true,
+	size = { "560", "640" },
+})
