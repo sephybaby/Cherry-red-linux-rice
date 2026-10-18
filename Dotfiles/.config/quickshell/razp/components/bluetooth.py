@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bluetooth popup (bluez / bluetoothctl). Opened by clicking the Bluetooth card."""
 import re
+import time
 
 import portal_common as pc
 from portal_common import Gtk, Pango
@@ -41,6 +42,9 @@ def fetch():
     if rc == 127:
         return {"error": "bluetoothctl is not installed (package: bluez-utils)."}
     if rc != 0 or "no default controller" in out.lower():
+        _, rf = pc.run(["rfkill", "list", "bluetooth"], 5)
+        if re.search(r"(Soft|Hard) blocked:\s*yes", rf):
+            return {"powered": False, "devices": [], "blocked": True}
         return {"error": "No Bluetooth adapter found. Is bluetooth.service running? "
                          "(systemctl status bluetooth)"}
     if not re.search(r"Powered:\s*yes", out):
@@ -92,6 +96,7 @@ class BluetoothPortal(pc.Portal):
         super().__init__("bluetooth", "Bluetooth")
         self.devices = []
         self._updating = False
+        self._power_busy = False
         self.hint.set_text("Click a device to connect or disconnect")
 
         self.switch = Gtk.Switch()
@@ -100,33 +105,44 @@ class BluetoothPortal(pc.Portal):
         self.header.pack_end(self.switch, False, False, 0)
 
         self.listbox.connect("row-activated", self._on_row)
-        self.refresh(scan=True)
+        self.refresh()
 
     # -- refresh -----------------------------------------------------------------
     def on_refresh(self):
-        self.refresh(scan=True)
+        self.pinned = False
+        self.refresh()
 
-    def refresh(self, scan=True):
-        if self.busy:
+    def refresh(self, scan=True, force=False):
+        """Never blocks clicks or the power switch while it scans."""
+        if scan and self.scanning and not force:
             return
-        self.busy = True
-        self.set_status("Looking for devices…", busy=True)
-        self.bg(self._refresh_worker, scan, False)
+        self._gen += 1
+        if scan:
+            self.scanning += 1
+            if self.can_update_status():
+                self.set_status("Looking for devices…", busy=True)
+        self.bg(self._refresh_worker, self._gen, scan)
 
-    def _refresh_worker(self, scan, keep_status):
+    def _refresh_worker(self, gen, scan):
         data = fetch()
-        scanning = bool(scan and data.get("powered"))
-        self.ui(self._show, data, not scanning, keep_status)
-        if not scanning:
+        do_scan = bool(scan and data.get("powered"))
+        state = "partial" if do_scan else ("final" if scan else "none")
+        self.ui(self._show, gen, data, state)
+        if not do_scan:
             return
         bt("--timeout", "8", "scan", "on", timeout=20)
-        self.ui(self._show, fetch(), True, keep_status)
+        self.ui(self._show, gen, fetch(), "final")
 
-    def _show(self, data, final, keep_status):
+    def _show(self, gen, data, scan_state):
+        if scan_state == "final":
+            self.scanning = max(0, self.scanning - 1)
+        if gen != self._gen:
+            return  # newer refresh (e.g. power toggled) already redrew things
+
         if "error" in data:
-            self.busy = False
             self._set_switch(False)
-            self.clear_list()
+            self.devices = []
+            self._rebuild()
             self.set_status(data["error"], "error")
             return
 
@@ -134,26 +150,24 @@ class BluetoothPortal(pc.Portal):
         self._set_switch(powered)
         self.devices = data["devices"]
         self._rebuild()
+        if not self.can_update_status():
+            return
 
         if not powered:
-            self.busy = False
-            self.set_status("Bluetooth is off. Flip the switch to turn it on.")
-            return
-        if not final:
-            if not keep_status:
-                self.set_status("Scanning for devices…", busy=True)
-            return
-
-        self.busy = False
-        if keep_status:
-            return
-        connected = [d["name"] for d in self.devices if d["connected"]]
-        if connected:
-            self.set_status("Connected to %s" % ", ".join(connected), "ok")
-        elif self.devices:
-            self.set_status("%d devices · none connected" % len(self.devices))
+            if data.get("blocked"):
+                self.set_status("Bluetooth is blocked (rfkill). Flip the switch to unblock it.")
+            else:
+                self.set_status("Bluetooth is off. Flip the switch to turn it on.")
+        elif scan_state == "partial":
+            self.set_status("Scanning for devices…", busy=True)
         else:
-            self.set_status("No devices found. Put your device in pairing mode and refresh.")
+            connected = [d["name"] for d in self.devices if d["connected"]]
+            if connected:
+                self.set_status("Connected to %s" % ", ".join(connected), "ok")
+            elif self.devices:
+                self.set_status("%d devices · none connected" % len(self.devices))
+            else:
+                self.set_status("No devices found. Put your device in pairing mode and refresh.")
 
     def _set_switch(self, state):
         self._updating = True
@@ -162,26 +176,35 @@ class BluetoothPortal(pc.Portal):
 
     # -- power ---------------------------------------------------------------------
     def _on_switch(self, switch, _param):
-        if self._updating:
-            return
-        if self.busy:
-            self._set_switch(not switch.get_active())
+        if self._updating or self._power_busy:
             return
         want = switch.get_active()
-        self.busy = True
+        self._power_busy = True
+        self.pinned = False
+        self._gen += 1  # drop scan results that are still on their way
         self.set_status("Turning Bluetooth %s…" % ("on" if want else "off"), busy=True)
         self.bg(self._power_worker, want)
 
     def _power_worker(self, want):
-        rc, out = bt("power", "on" if want else "off", timeout=10)
-        if "succeeded" not in out.lower():
-            self.ui(self._after_action, explain_failure(out, "Bluetooth", "turn on" if want else "turn off"), False)
-            return
-        self.ui(self._finish_power, want)
+        if want:
+            pc.run(["rfkill", "unblock", "bluetooth"], 5)
+        out = ""
+        for _ in range(4 if want else 1):  # controller can take a second to reappear
+            _, out = bt("power", "on" if want else "off", timeout=10)
+            if "succeeded" in out.lower() or "no default controller" not in out.lower():
+                break
+            time.sleep(1)
+        self.ui(self._power_done, want, "succeeded" in out.lower(), out)
 
-    def _finish_power(self, want):
-        self.busy = False
-        self.refresh(scan=want)
+    def _power_done(self, want, ok, out):
+        self._power_busy = False
+        if ok:
+            self.refresh(scan=want, force=True)
+            return
+        self.pinned = True
+        self.set_status(explain_failure(out, "Bluetooth", "turn on" if want else "turn off"),
+                        "error")
+        self.refresh(scan=False)  # snaps the switch back to the real state
 
     # -- rows ------------------------------------------------------------------------
     def _rebuild(self):
@@ -224,18 +247,28 @@ class BluetoothPortal(pc.Portal):
 
     def _on_row(self, _listbox, row):
         dev = getattr(row, "dev", None)
-        if dev is None or self.busy:
+        if dev is None or self.busy or self._power_busy:
             return
-        self.busy = True
         if dev["connected"]:
-            self.set_status("Disconnecting from %s…" % dev["name"], busy=True)
+            self._begin("Disconnecting from %s…" % dev["name"])
             self.bg(self._disconnect_worker, dev)
         else:
             verb = "Connecting to" if dev["paired"] else "Pairing with"
-            self.set_status("%s %s…" % (verb, dev["name"]), busy=True)
+            self._begin("%s %s…" % (verb, dev["name"]))
             self.bg(self._connect_worker, dev)
 
     # -- actions ---------------------------------------------------------------------------
+    def _begin(self, text):
+        self.busy = True
+        self.pinned = False
+        self.set_status(text, busy=True)
+
+    def _after_action(self, message, ok):
+        self.busy = False
+        self.pinned = True  # keep this message until the user does something else
+        self.set_status(message, "ok" if ok else "error")
+        self.refresh(scan=False)
+
     def _connect_worker(self, dev):
         mac, name = dev["mac"], dev["name"]
         if not dev["paired"]:
@@ -261,23 +294,16 @@ class BluetoothPortal(pc.Portal):
             self.ui(self._after_action, "Disconnected from %s" % dev["name"], True)
 
     def _forget(self, dev):
-        if self.busy:
+        if self.busy or self._power_busy:
             return
-        self.busy = True
-        self.set_status("Forgetting %s…" % dev["name"], busy=True)
+        self._begin("Forgetting %s…" % dev["name"])
         self.bg(self._forget_worker, dev)
 
     def _forget_worker(self, dev):
         _, out = bt("remove", dev["mac"])
-        ok = "removed" in out.lower()
+        gone = "removed" in out.lower() or not device_info(dev["mac"])["paired"]
         self.ui(self._after_action,
-                "Forgot %s" % dev["name"] if ok else "Could not forget %s." % dev["name"], ok)
-
-    def _after_action(self, message, ok):
-        self.busy = False
-        self.set_status(message, "ok" if ok else "error")
-        self.busy = True
-        self.bg(self._refresh_worker, False, True)  # redraw list, keep the message
+                "Forgot %s" % dev["name"] if gone else "Could not forget %s." % dev["name"], gone)
 
 
 if __name__ == "__main__":

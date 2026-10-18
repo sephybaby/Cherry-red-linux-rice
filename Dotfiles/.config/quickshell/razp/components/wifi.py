@@ -55,15 +55,22 @@ def parse_networks(text):
 
 
 def fetch():
-    """-> (returncode, raw output, networks) with `known` filled in."""
+    """-> (returncode, raw output, networks) with `known` and `connected` filled in."""
     rc, out = iwctl("station", DEVICE, "get-networks", "rssi-dbms")
     nets = parse_networks(out)
     if not nets and rc != 0:  # older iwctl without rssi-dbms
         rc, out = iwctl("station", DEVICE, "get-networks")
         nets = parse_networks(out)
     known = {n["ssid"] for n in parse_networks(iwctl("known-networks", "list")[1])}
+    current = current_ssid()  # the real answer, not the ">" marker in the table
     for net in nets:
         net["known"] = net["ssid"] in known
+        if current:
+            net["connected"] = net["ssid"] == current
+    if current and not any(n["ssid"] == current for n in nets):
+        # connected but not in the scan results (hidden / just out of range)
+        nets.append({"ssid": current, "connected": True, "known": True,
+                     "security": "psk", "bars": 0})
     return rc, out, nets
 
 
@@ -160,6 +167,8 @@ class WifiPortal(pc.Portal):
         self.pw_entry.set_text("")
         self.revealer.set_reveal_child(True)
         self.pw_entry.grab_focus()
+        self.pinned = True
+        self.set_status('Type the password for "%s" below, then press Enter.' % net["ssid"])
 
     def _hide_prompt(self):
         self.pending = None
@@ -172,7 +181,8 @@ class WifiPortal(pc.Portal):
         if net is None or not password:
             return
         self._hide_prompt()
-        self._start_connect(net, password)
+        self._begin("Connecting to %s…" % net["ssid"])
+        self.bg(self._connect_worker, net, password)
 
     def on_escape(self):
         if self.revealer.get_reveal_child():
@@ -180,44 +190,56 @@ class WifiPortal(pc.Portal):
             return True
         return False
 
-    # -- scanning ------------------------------------------------------------------
+    # -- refreshing ------------------------------------------------------------------
     def on_refresh(self):
+        self.pinned = False
         self.refresh()
 
     def refresh(self):
-        if self.busy:
+        """Scan for networks. Never blocks clicking on a network."""
+        if self.scanning:
             return
-        self.busy = True
-        self.set_status("Scanning for networks…", busy=True)
-        self.bg(self._scan_worker)
+        self._gen += 1
+        self.scanning += 1
+        if self.can_update_status():
+            self.set_status("Scanning for networks…", busy=True)
+        self.bg(self._scan_worker, self._gen)
 
-    def _scan_worker(self):
-        # Show whatever iwd already knows straight away, then scan for fresh results.
+    def _quick_refresh(self):
+        self._gen += 1
+        self.bg(self._quick_worker, self._gen)
+
+    def _scan_worker(self, gen):
+        # Show what iwd already knows straight away, then scan for fresh results.
         rc, out, nets = fetch()
         failed = rc != 0 and not nets
-        self.ui(self._apply, rc, out, nets, not failed)
+        self.ui(self._apply, gen, rc, out, nets, "final" if failed else "partial")
         if failed:
             return
         pc.run(["iwctl", "station", DEVICE, "scan"], 20)
         time.sleep(2.5)
         rc, out, nets = fetch()
-        self.ui(self._apply, rc, out, nets, False)
+        self.ui(self._apply, gen, rc, out, nets, "final")
 
-    def _quick_refresh(self):
+    def _quick_worker(self, gen):
         rc, out, nets = fetch()
-        self.ui(self._apply, rc, out, nets, False)
+        self.ui(self._apply, gen, rc, out, nets, "none")
 
-    def _apply(self, rc, out, nets, scanning):
+    def _apply(self, gen, rc, out, nets, scan_state):
+        if scan_state == "final":
+            self.scanning = max(0, self.scanning - 1)
+        if gen != self._gen:
+            return  # a newer refresh already redrew the list
         self.networks = nets
         self._rebuild()
+        if not self.can_update_status():
+            return
         if rc != 0 and not nets:
-            self.busy = False
             self.set_status(explain_scan_error(rc, out), "error")
             return
-        if scanning:
+        if scan_state == "partial":
             self.set_status("Scanning for networks…", busy=True)
             return
-        self.busy = False
         count = len(nets)
         current = next((n for n in nets if n["connected"]), None)
         word = "network" if count == 1 else "networks"
@@ -259,9 +281,12 @@ class WifiPortal(pc.Portal):
             box.pack_start(
                 self.action_button("forget", lambda n=net: self._forget(n)), False, False, 0)
 
-        security = Gtk.Label(label=SECURITY_LABEL.get(net["security"], net["security"]))
-        security.get_style_context().add_class("meta")
-        box.pack_start(security, False, False, 0)
+        if net["connected"]:
+            tag = Gtk.Label(label="connected")
+        else:
+            tag = Gtk.Label(label=SECURITY_LABEL.get(net["security"], net["security"]))
+        tag.get_style_context().add_class("meta")
+        box.pack_start(tag, False, False, 0)
 
         signal = Gtk.Label()
         signal.set_markup("".join(
@@ -276,21 +301,30 @@ class WifiPortal(pc.Portal):
         if net is None or self.busy:
             return
         if net["connected"]:
+            self.pinned = True
             self.set_status("Already connected to %s" % net["ssid"], "ok")
         elif net["security"] == "8021x":
+            self.pinned = True
             self.set_status(
                 "%s is an enterprise (802.1x) network. Configure it in iwd first." % net["ssid"],
                 "error")
         elif net["security"] == "open" or net["known"]:
-            self._start_connect(net, None)
+            self._begin("Connecting to %s…" % net["ssid"])
+            self.bg(self._connect_worker, net, None)
         else:
             self._ask_password(net)
 
-    # -- connect / disconnect / forget -------------------------------------------------
-    def _start_connect(self, net, password):
+    # -- actions -----------------------------------------------------------------------
+    def _begin(self, text):
         self.busy = True
-        self.set_status("Connecting to %s…" % net["ssid"], busy=True)
-        self.bg(self._connect_worker, net, password)
+        self.pinned = False
+        self.set_status(text, busy=True)
+
+    def _after_action(self, message, ok):
+        self.busy = False
+        self.pinned = True  # keep this message until the user does something else
+        self.set_status(message, "ok" if ok else "error")
+        self._quick_refresh()
 
     def _connect_worker(self, net, password):
         ssid = net["ssid"]
@@ -311,33 +345,33 @@ class WifiPortal(pc.Portal):
     def _disconnect(self):
         if self.busy:
             return
-        self.busy = True
-        self.set_status("Disconnecting…", busy=True)
+        self._begin("Disconnecting…")
         self.bg(self._disconnect_worker)
 
     def _disconnect_worker(self):
         rc, out = iwctl("station", DEVICE, "disconnect")
-        ok = rc == 0
-        self.ui(self._after_action, "Disconnected" if ok else "Could not disconnect: %s" % out, ok)
+        still = current_ssid()
+        if still:
+            self.ui(self._after_action, "Still connected to %s. %s" % (still, out), False)
+        else:
+            self.ui(self._after_action, "Disconnected", True)
 
     def _forget(self, net):
         if self.busy:
             return
-        self.busy = True
-        self.set_status("Forgetting %s…" % net["ssid"], busy=True)
+        self._begin("Forgetting %s…" % net["ssid"])
         self.bg(self._forget_worker, net["ssid"])
 
     def _forget_worker(self, ssid):
         rc, out = iwctl("known-networks", ssid, "forget")
-        ok = rc == 0
-        self.ui(self._after_action,
-                "Forgot %s" % ssid if ok else "Could not forget %s: %s" % (ssid, out), ok)
-
-    def _after_action(self, message, ok):
-        self.busy = False
-        self.set_status(message, "ok" if ok else "error")
-        if ok:
-            self.bg(self._quick_refresh)
+        # iwctl exit codes are unreliable: check the saved-network list instead.
+        _, listing = iwctl("known-networks", "list")
+        if ssid in {n["ssid"] for n in parse_networks(listing)}:
+            detail = out or "iwd did not remove it (exit code %d)" % rc
+            self.ui(self._after_action, "Could not forget %s: %s" % (ssid, detail), False)
+        else:
+            self.ui(self._after_action,
+                    "Forgot %s. Click it again to add it with a new password." % ssid, True)
 
 
 if __name__ == "__main__":

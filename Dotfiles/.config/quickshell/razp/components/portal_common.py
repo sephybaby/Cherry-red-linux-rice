@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import threading
+import traceback
 
 import gi
 
@@ -122,7 +123,10 @@ class Portal(Gtk.Window):
         GLib.set_application_name(title)
         super().__init__(title=title)
 
-        self.busy = False
+        self.busy = False      # a connect / forget / pair action is running
+        self.scanning = 0      # scans in flight (a scan never blocks clicks)
+        self.pinned = False    # keep the last action message on screen
+        self._gen = 0          # bumped on every refresh; older results are dropped
         self._armed = False
 
         self._load_css()
@@ -248,9 +252,25 @@ class Portal(Gtk.Window):
         return button
 
     # -- threading -----------------------------------------------------------------
-    @staticmethod
-    def bg(func, *args):
-        threading.Thread(target=func, args=args, daemon=True).start()
+    def bg(self, func, *args):
+        """Run func in a thread. If it crashes, unlock the UI and show why
+        instead of leaving the popup silently stuck."""
+        def runner():
+            try:
+                func(*args)
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                self.ui(self._worker_failed, exc)
+        threading.Thread(target=runner, daemon=True).start()
+
+    def _worker_failed(self, exc):
+        self.busy = False
+        self.scanning = 0
+        self.pinned = True
+        self.set_status("Unexpected error: %s" % exc, "error")
+
+    def can_update_status(self):
+        return not (self.busy or self.pinned)
 
     @staticmethod
     def ui(func, *args):
