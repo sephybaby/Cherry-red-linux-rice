@@ -1,7 +1,6 @@
 {
   "hyprland/workspaces": {
     "format": "{icon}",
-    "on-click": "activate",
     "format-icons": {
       "1": "",
 	  "2": "󰎚",
@@ -39,7 +38,7 @@
       "critical": 15
     },
     "format": "{icon} {capacity}%",
-    "format-charging": "  {capacity}%",
+    "format-charging": " {capacity}%",
     "format-plugged": "  {capacity}%",
     "format-alt": "{icon}  {time}"
   },
@@ -119,4 +118,11 @@
     "escape": true
   },
 
+  "custom/razp": {
+    "exec": "echo ",
+    "interval": "once",
+    "format": "",
+    "tooltip": false,
+    "on-click": "~/.config/waybar/razp-toggle.sh"
+  }
 }

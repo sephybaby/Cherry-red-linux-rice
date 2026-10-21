@@ -24,6 +24,41 @@ Rectangle {
     property string artUrl: ""
     property string musicStatus: ""
 
+    // playback progress (seconds)
+    property real songLength: 0
+    property real livePosition: 0          // real playback position
+    property double ignorePollUntil: 0     // ignore stale polls right after a seek
+    property real previewPosition: 0       // where the knob is while dragging
+    readonly property real shownPosition: vinylSlider.dragging ? previewPosition : livePosition
+
+    function formatTime(s) {
+        if (!isFinite(s) || s < 0) s = 0
+        var total = Math.floor(s)
+        var h = Math.floor(total / 3600)
+        var m = Math.floor((total % 3600) / 60)
+        var sec = total % 60
+        var ss = (sec < 10 ? "0" : "") + sec
+        return h > 0 ? h + ":" + (m < 10 ? "0" : "") + m + ":" + ss : m + ":" + ss
+    }
+
+    // Seek by an offset from the current position. The relative form uses
+    // MPRIS "Seek", which works on more players (Spotify included) than
+    // an absolute "SetPosition".
+    function seekTo(seconds) {
+        var target = Math.max(0, Math.min(root.songLength - 0.5, seconds))
+        seekProcess.running = false
+        seekProcess.command = [
+            "sh", "-c",
+            "cur=$(playerctl position 2>/dev/null) || exit 1; " +
+            "d=$(awk -v t=\"$1\" -v c=\"$cur\" 'BEGIN { d = t - c; if (d < 0) printf \"%.3f-\", -d; else printf \"%.3f+\", d }'); " +
+            "playerctl position \"$d\"",
+            "sh", target.toFixed(3)
+        ]
+        seekProcess.running = true
+        root.livePosition = target
+        root.ignorePollUntil = Date.now() + 1200
+    }
+
     color: surface
     radius: 15
     border.width: 1
@@ -44,6 +79,7 @@ Rectangle {
     function refreshMusic() {
         runProcess(metadataProcess)
         runProcess(statusProcess)
+        runProcess(positionProcess)
     }
 
     Process {
@@ -51,16 +87,21 @@ Rectangle {
 
         command: [
             "sh", "-lc",
-            "playerctl metadata --format '{{title}}|{{artist}}|{{mpris:artUrl}}' 2>/dev/null || echo 'Nothing playing||'"
+            "playerctl metadata --format '{{title}}§§{{artist}}§§{{mpris:artUrl}}§§{{mpris:length}}' 2>/dev/null || echo 'Nothing playing§§§§§§0'"
         ]
 
         stdout: StdioCollector {
             onStreamFinished: {
-                var parts = text.trim().split("|")
+                var parts = text.trim().split("§§")
 
-                root.songTitle =
+                var newTitle =
                     parts.length > 0 && parts[0] !== ""
                     ? parts[0] : "Nothing playing"
+
+                // new song: start the groove from 0:00 again
+                if (newTitle !== root.songTitle)
+                    root.livePosition = 0
+                root.songTitle = newTitle
 
                 root.songArtist =
                     parts.length > 1 ? parts[1] : ""
@@ -70,9 +111,30 @@ Rectangle {
 
                 if (root.artUrl !== newArtUrl)
                     root.artUrl = newArtUrl
+
+                // mpris:length is in microseconds
+                var micro = parts.length > 3 ? Number(parts[3]) : 0
+                root.songLength = isFinite(micro) && micro > 0 ? micro / 1000000 : 0
             }
         }
     }
+
+    Process {
+        id: positionProcess
+
+        command: ["sh", "-lc", "playerctl position 2>/dev/null || echo 0"]
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (Date.now() < root.ignorePollUntil || vinylSlider.dragging)
+                    return
+                var pos = parseFloat(text.trim())
+                root.livePosition = isFinite(pos) ? pos : 0
+            }
+        }
+    }
+
+    Process { id: seekProcess }
 
     Process {
         id: statusProcess
@@ -98,6 +160,21 @@ Rectangle {
         running: true
         repeat: true
         onTriggered: root.refreshMusic()
+    }
+
+    // poll the real position every second, and smooth the knob in between
+    Timer {
+        interval: 1000
+        running: root.musicStatus === "Playing"
+        repeat: true
+        onTriggered: root.runProcess(positionProcess)
+    }
+
+    Timer {
+        interval: 250
+        running: root.musicStatus === "Playing" && root.songLength > 0
+        repeat: true
+        onTriggered: root.livePosition = Math.min(root.songLength, root.livePosition + 0.25)
     }
 
     Component.onCompleted: root.refreshMusic()
@@ -127,14 +204,16 @@ Rectangle {
 			id: artworkFrame
 
 			Layout.alignment: Qt.AlignHCenter
-			Layout.preferredWidth: Math.min(220, parent.width)
-			Layout.preferredHeight: Math.min(220, parent.width)
-			width: Math.min(220, parent.width)
+			Layout.preferredWidth: Math.min(290, parent.width)
+			Layout.preferredHeight: Math.min(290, parent.width)
+			width: Math.min(290, parent.width)
 			height: width
 
 			Item {
 				id: vinylRecord
-				anchors.fill: parent
+				anchors.centerIn: parent
+				width: parent.width * 0.76   // leaves room for the seek arc around it
+				height: width
 
 				// vinyl look
 				Rectangle {
@@ -148,7 +227,7 @@ Rectangle {
 				Item {
 					id: artworkMask
 					anchors.fill: parent
-					anchors.margins: 13
+					anchors.margins: 20
 
 					Image {
 						id: artwork
@@ -184,19 +263,20 @@ Rectangle {
 					}
 				}
 
+				// faint vinyl grooves near the rim of the disc
 				Repeater {
-					model: 3
+					model: [0.475, 0.455, 0.435]
 
 					delegate: Rectangle {
-						required property int index
+						required property real modelData
 
 						anchors.centerIn: parent
-						width: parent.width - 28 - index * 16
+						width: parent.width * modelData * 2
 						height: width
 						radius: width / 2
 						color: "transparent"
 						border.width: 1
-						border.color: "#45f0a0b8"
+						border.color: "#35f0a0b8"
 					}
 				}
 
@@ -249,6 +329,20 @@ Rectangle {
 					font.pixelSize: 9
 					font.letterSpacing: 1
 				}
+			}
+
+			// Arc seek slider around the top of the vinyl: 0:00 on the left, song end on the right
+			VinylSlider {
+				id: vinylSlider
+				anchors.fill: parent
+				enabled: root.songLength > 0
+				value: root.songLength > 0 ? root.livePosition / root.songLength : 0
+				fillColor: root.cherry
+				handleColor: root.textColor
+				labelColor: root.muted
+				endText: root.songLength > 0 ? root.formatTime(root.songLength) : "--:--"
+				onMoved: v => root.previewPosition = v * root.songLength
+				onSeekRequested: v => root.seekTo(v * root.songLength)
 			}
 
 			// Playback status indicator
@@ -343,7 +437,10 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignHCenter
-            text: root.musicStatus === "" ? "SPOTIFY" : root.musicStatus.toUpperCase()
+            text: (root.musicStatus === "" ? "SPOTIFY" : root.musicStatus.toUpperCase())
+                  + (root.songLength > 0
+                     ? "  ·  " + root.formatTime(root.shownPosition) + " / " + root.formatTime(root.songLength)
+                     : "")
             color: root.muted
             font.pixelSize: 8
             font.letterSpacing: 2

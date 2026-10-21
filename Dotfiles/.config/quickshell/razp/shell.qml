@@ -1,8 +1,10 @@
+//@ pragma NoReloadPopup
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+import Quickshell.Hyprland
 import "components"
 
 PanelWindow {
@@ -16,8 +18,7 @@ PanelWindow {
 
     WlrLayershell.namespace: "razp-dashboard"
     WlrLayershell.layer: WlrLayer.Overlay
-    // OnDemand: the dashboard only grabs the keyboard when you click a text field (to-do list)
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    WlrLayershell.keyboardFocus: root.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     property color panel: "#f2210207"
     property color surface: "#42030f"
@@ -29,18 +30,47 @@ PanelWindow {
     property color textColor: "#ffe8ee"
     property color hoverColor: "#58101d"
 
-    // Obsidian folder holding the to-do note (one note per day, named DD-MM-YY.md, is created here)
+    // connection to obsidian 
     property string todoFolder: "/home/sephy/Obsidian/Uni/System/To-Dos"
 
-    // True while the Wi-Fi or Bluetooth manager window is open: the dashboard steps aside
-    // (it sits on the Overlay layer, so it would cover the window) and comes back on close.
-    property bool toolOpen: wifiTool.running || bluetoothTool.running
-    visible: !toolOpen
+    // quotes 
+    property string quoteFile: "/home/sephy/Obsidian/Uni/System/Life Lessons & Quotes.md"
 
-    // Command that starts `bin`, or opens a terminal with an install hint if it is missing.
+    property bool shown: false
+    onShownChanged: { if (shown) refreshSystem(); else lastHidden = Date.now() }
+
+    property bool toolOpen: wifiTool.running || bluetoothTool.running
+    visible: shown && !toolOpen
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        onActivated: root.shown = false
+    }
+
+    HyprlandFocusGrab {
+        windows: [root]
+        active: root.shown && !root.toolOpen
+        onCleared: root.shown = false
+    }
+
+    property real lastHidden: 0
+
+    IpcHandler {
+        target: "razp"
+        function toggle(): void {
+            if (root.shown) root.shown = false
+            else if (Date.now() - root.lastHidden > 400) root.shown = true
+        }
+        function show(): void { root.shown = true }
+        function hide(): void { root.shown = false }
+    }
+
     function toolCommand(bin, hint) {
+        var theme = Quickshell.shellDir + "/popup-theme"
         return ["sh", "-c",
-                "command -v " + bin + " >/dev/null || exec kitty -e sh -c 'echo \"" + hint + "\"; read -r _'; exec " + bin]
+                "command -v " + bin + " >/dev/null || exec kitty -e sh -c 'echo \"" + hint + "\"; read -r _'; " +
+                "exec env XDG_CONFIG_HOME=\"" + theme + "\" GTK_THEME=Adwaita:dark " + bin]
     }
 
     property string currentTime: Qt.formatDateTime(new Date(), "hh:mm AP")
@@ -53,6 +83,8 @@ PanelWindow {
 	property string wifiDownload: "-- Mbps"
 	property string wifiUpload: "-- Mbps"
     property string batteryState: "Battery"
+    property string batteryPercent: "--"
+    property bool batteryCharging: false
     property string volumeState: "Volume"
     property string brightnessState: "Brightness"
     property string profileState: "balanced"
@@ -60,8 +92,11 @@ PanelWindow {
     property string bluetoothDevice: "Not connected"
     property string musicStatus: ""
 
+    function profileLabel(value) {
+        return value === "power-saver" ? "Power saving" : value === "performance" ? "performance" : "balanced"
+    }
+
     function runProcess(proc) {
-        // Quickshell Process is controlled through its running property.
         proc.running = false
         proc.running = true
     }
@@ -70,7 +105,7 @@ PanelWindow {
     property int volumeTarget: 50
 
     function setBrightness(v) {
-        root.brightnessTarget = Math.max(1, v)      // never fully black
+        root.brightnessTarget = Math.max(1, v)      
         root.brightnessState = root.brightnessTarget + "%"
         if (!brightnessTimer.running) brightnessTimer.start()
     }
@@ -106,7 +141,7 @@ PanelWindow {
     }
     Timer {
         interval: 5000
-        running: true
+        running: root.shown
         repeat: true
         onTriggered: root.refreshSystem()
     }
@@ -182,8 +217,15 @@ Process {
     }
     Process {
         id: batteryProcess
-        command: ["sh", "-lc", "if [ -r /sys/class/power_supply/BAT0/capacity ]; then cat /sys/class/power_supply/BAT0/capacity; else echo '--'; fi"]
-        stdout: StdioCollector { onStreamFinished: root.batteryState = text.trim() + (text.trim() === "--" ? "" : "%") }
+        command: ["sh", "-lc", "b=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -n1); if [ -n \"$b\" ]; then printf '%s|%s' \"$(cat $b/capacity)\" \"$(cat $b/status)\"; else printf '%s|%s' '--' 'None'; fi"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var p = text.trim().split("|")
+                root.batteryPercent = (p[0] === "" || p[0] === "--") ? "--" : p[0] + "%"
+                root.batteryCharging = p.length > 1 && p[1] === "Charging"
+                root.batteryState = root.batteryPercent
+            }
+        }
     }
     Process {
         id: volumeProcess
@@ -237,8 +279,7 @@ Process {
                 anchors.margins: 16
                 spacing: 14
 
-                // LEFT: tall music card with circular artwork and controls
-                MusicCard {
+				MusicCard {
                     Layout.preferredWidth: 330
                     Layout.fillHeight: true
                     cherry: root.cherry
@@ -251,7 +292,6 @@ Process {
                     hoverColor: root.hoverColor
                 }
 
-                // RIGHT: exact sketch structure — status row, sliders, calendar + apps
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -259,7 +299,9 @@ Process {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 104
+                        Layout.fillHeight: false
+                        Layout.preferredHeight: 106
+                        Layout.maximumHeight: 106
                         spacing: 10
 
                         Rectangle {
@@ -272,7 +314,7 @@ Process {
                                 anchors.fill: parent
                                 anchors.margins: 13
                                 spacing: 3
-                                Text { text: "TIME · DAY · DATE"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
+                                Text { text: "Time"; color: root.muted; font.pixelSize: 12; font.letterSpacing: 1 }
                                 Text {
                                     Layout.fillWidth: true
                                     text: root.currentTime
@@ -285,7 +327,7 @@ Process {
                                 Text {
                                     Layout.fillWidth: true
                                     text: root.currentDate
-                                    color: root.pink
+                                    color: root.textColor
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
                                 }
@@ -309,7 +351,7 @@ Process {
                                     ColumnLayout {
                                         Layout.fillWidth: true
                                         spacing: 2
-                                        Text { text: "WI-FI"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
+                                        Text { text: "Wi-Fi"; color: root.muted; font.pixelSize: 12; font.letterSpacing: 1 }
                                         Text {
                                             Layout.fillWidth: true
                                             text: root.wifiNetwork
@@ -321,15 +363,7 @@ Process {
                                     }
                                     Text { text: root.wifiState; color: root.pink; font.pixelSize: 9 }
                                 }
-                                Rectangle { Layout.fillWidth: true; height: 1; color: root.borderColor }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Text { text: root.wifiSignal; color: root.muted; font.pixelSize: 10 }
-                                    Item { Layout.fillWidth: true }
-                                    Text { text: "↓ " + root.wifiDownload; color: root.textColor; font.pixelSize: 10 }
-                                    Text { text: "↑ " + root.wifiUpload; color: root.textColor; font.pixelSize: 10 }
-                                }
-                            }
+                                                            }
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
@@ -350,11 +384,11 @@ Process {
                                 spacing: 5
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    Text { text: "ᛒ"; color: root.cherry; font.pixelSize: 22 }
+                                    Text { text: ""; color: root.cherry; font.pixelSize: 22 }
                                     ColumnLayout {
                                         Layout.fillWidth: true
                                         spacing: 2
-                                        Text { text: "BLUETOOTH"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
+                                        Text { text: "Bluetooth"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
                                         Text {
                                             Layout.fillWidth: true
                                             text: root.bluetoothDevice
@@ -366,14 +400,7 @@ Process {
                                     }
                                     Text { text: root.bluetoothState; color: root.pink; font.pixelSize: 9 }
                                 }
-                                Rectangle { Layout.fillWidth: true; height: 1; color: root.borderColor }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    Text { text: "click: devices"; color: root.muted; font.pixelSize: 10 }
-                                    Item { Layout.fillWidth: true }
-                                    Text { text: "right-click: on/off"; color: root.muted; font.pixelSize: 10 }
-                                }
-                            }
+                                                            }
                             MouseArea {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -383,36 +410,65 @@ Process {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: 154
+                            Layout.preferredWidth: 200
                             Layout.fillHeight: true
                             radius: 16
                             color: root.surface
                             border.color: root.borderColor
                             ColumnLayout {
                                 anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 5
-                                Text { text: "POWER PROFILE"; color: root.muted; font.pixelSize: 8; font.letterSpacing: 1 }
-                                Repeater {
-                                    model: [
-                                        { label: "SAVE", value: "power-saver" },
-                                        { label: "BALANCED", value: "balanced" },
-                                        { label: "PERF", value: "performance" }
-                                    ]
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        radius: 7
-                                        color: root.profileState === modelData.value ? root.surfaceLight : "transparent"
-                                        border.color: root.profileState === modelData.value ? root.cherry : root.borderColor
-                                        Text { anchors.centerIn: parent; text: modelData.label; color: root.textColor; font.pixelSize: 9 }
-                                        Process { id: profileSetter; command: ["powerprofilesctl", "set", modelData.value] }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                root.runProcess(profileSetter)
-                                                root.profileState = modelData.value
+                                anchors.margins: 11
+                                spacing: 4
+                                Text {
+                                    text: "Battery · " + root.profileLabel(root.profileState)
+                                    color: root.muted
+                                    font.pixelSize: 9
+                                    font.letterSpacing: 1
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 20
+                                    Text { text: root.batteryPercent; color: root.textColor; font.pixelSize: 26; font.bold: true }
+                                    Text {
+                                        visible: root.batteryCharging
+                                        text: ""
+                                        color: root.textColor
+                                        font.pixelSize: 20
+                                        Layout.alignment: Qt.AlignBottom
+                                        Layout.bottomMargin: 3
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Repeater {
+                                        model: [
+                                            { icon: "", value: "power-saver" },
+                                            { icon: "", value: "balanced" },
+                                            { icon: "", value: "performance" }
+                                        ]
+                                        delegate: Rectangle {
+                                            id: modeButton
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 28
+                                            radius: 9
+                                            color: root.profileState === modelData.value
+                                                   ? root.cherry
+                                                   : (modeMouse.containsMouse ? root.hoverColor : root.borderColor)
+                                            border.color: root.profileState === modelData.value ? root.pink : "transparent"
+                                            Text { anchors.centerIn: parent; text: modeButton.modelData.icon; color: root.textColor; font.pixelSize: 15 }
+                                            Process { id: modeSetter; command: ["powerprofilesctl", "set", modeButton.modelData.value] }
+                                            MouseArea {
+                                                id: modeMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    root.profileState = modeButton.modelData.value
+                                                    root.runProcess(modeSetter)
+                                                }
                                             }
                                         }
                                     }
@@ -421,10 +477,17 @@ Process {
                         }
                     }
 
-                    // Brightness and volume are full-width horizontal controls
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: false
+                        Layout.preferredHeight: 43
+                        Layout.maximumHeight: 43
+                        spacing: 10
+
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 43
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
                         radius: 13
                         color: root.surface
                         border.color: root.borderColor
@@ -432,9 +495,22 @@ Process {
                             anchors.fill: parent
                             anchors.leftMargin: 14
                             anchors.rightMargin: 14
-                            spacing: 12
-                            Text { text: "☼"; color: root.cherry; font.pixelSize: 21 }
-                            Text { text: "BRIGHTNESS"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
+							spacing: 12
+
+							Text { 
+								readonly property var icons: ["","","","","","","","","","","","","","",""]
+            
+							 text: {
+									let pct = brightnessSlider.value;
+								    let index = Math.floor((pct / 100) * (icons.length - 1));
+									return icons[Math.max(0, Math.min(index, icons.length - 1))];
+								}
+            
+							color: root.textColor 
+							font.pixelSize: 25 
+							font.family: "JetBrainsMono Nerd Font"
+							}
+
                             HSlider {
                                 id: brightnessSlider
                                 Layout.fillWidth: true
@@ -451,7 +527,8 @@ Process {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 43
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
                         radius: 13
                         color: root.surface
                         border.color: root.borderColor
@@ -461,10 +538,9 @@ Process {
                             anchors.rightMargin: 14
                             spacing: 12
                             Text {
-                                text: "◖"; color: root.cherry; font.pixelSize: 20
+                                text: "󰋋"; color: root.textColor; font.pixelSize: 20
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.runProcess(volumeToggle) }
                             }
-                            Text { text: "VOLUME"; color: root.muted; font.pixelSize: 9; font.letterSpacing: 1 }
                             HSlider {
                                 id: volumeSlider
                                 Layout.fillWidth: true
@@ -479,14 +555,15 @@ Process {
                         }
                     }
 
-                    // Bottom row: calendar on the left, app buttons + to-do on the right
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         spacing: 10
 
                         CalendarCard {
-                            Layout.preferredWidth: 330
+                            Layout.preferredWidth: 300
                             Layout.fillHeight: true
                             cherry: root.cherry
                             pink: root.pink
@@ -496,79 +573,91 @@ Process {
                             borderColor: root.borderColor
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
+                        GridLayout {
+                            Layout.preferredWidth: 224
                             Layout.fillHeight: true
-                            spacing: 10
+                            columns: 2
+                            rowSpacing: 10
+                            columnSpacing: 10
+                            uniformCellWidths: true
+                            uniformCellHeights: true
 
-                            // App shortcuts (edit label / icon / command here)
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: false      // a nested layout stretches if any child fills, so pin it
-                                Layout.preferredHeight: 48
-                                Layout.maximumHeight: 48
-                                spacing: 9
-
-                                Repeater {
-                                    model: [
-                                        { label: "Terminal", icon: ">_", command: "kitty" },
-                                        { label: "Obsidian", icon: "✧", command: "obsidian" },
-                                        { label: "Files", icon: "▤", command: "thunar || dolphin || xdg-open \"$HOME\"" },
-                                        { label: "Zen", icon: "♡", command: "flatpak run app.zen_browser.zen" }
-                                    ]
-                                    delegate: Rectangle {
-                                        id: appTile
-                                        required property var modelData
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        radius: 13
-                                        color: tileMouse.containsMouse ? root.hoverColor : root.surface
-                                        border.color: root.borderColor
-                                        Row {
-                                            anchors.centerIn: parent
-                                            spacing: 8
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: appTile.modelData.icon; color: root.cherry; font.pixelSize: 18 }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: appTile.modelData.label; color: root.textColor; font.pixelSize: 11 }
-                                        }
-                                        Process { id: launchApp; command: ["sh", "-lc", appTile.modelData.command] }
-                                        MouseArea {
-                                            id: tileMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root.runProcess(launchApp)
+                            Repeater {
+                                model: [
+                                    { label: "Terminal", icon: "", command: "kitty" },
+                                    { label: "Obsidian", icon: "✶", command: "obsidian" },
+                                    { label: "Files", icon: "🗋", command: "thunar || dolphin || nautilus || xdg-open \"$HOME\"" },
+                                    { label: "Zen", icon: "", command: "flatpak run app.zen_browser.zen" },
+                                    { label: "Vesktop", icon: "", command: "vesktop || flatpak run dev.vencord.Vesktop" },
+                                    { label: "Spotify", icon: "", command: "spotify-launcher || spotify || flatpak run com.spotify.Client" }
+                                ]
+                                delegate: Rectangle {
+                                    id: appTile
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    radius: 14
+                                    color: tileMouse.containsMouse ? root.hoverColor : root.surface
+                                    border.color: root.borderColor
+                                    Column {
+                                        anchors.centerIn: parent
+                                        spacing: 6
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: appTile.modelData.icon; color: root.textColor; font.pixelSize: 24 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: appTile.modelData.label; color: root.textColor; font.pixelSize: 11 }
+                                    }
+                                    Process { id: launchApp; command: ["sh", "-lc", appTile.modelData.command] }
+                                    MouseArea {
+                                        id: tileMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.runProcess(launchApp)
+                                            root.shown = false
                                         }
                                     }
                                 }
                             }
-
-                            // To-do list stored in your Obsidian vault
-                            TodoCard {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                Layout.minimumHeight: 150
-                                folder: root.todoFolder
-                                cherry: root.cherry
-                                pink: root.pink
-                                muted: root.muted
-                                textColor: root.textColor
-                                surface: root.surface
-                                surfaceLight: root.surfaceLight
-                                borderColor: root.borderColor
-                                hoverColor: root.hoverColor
-                            }
                         }
+
+                        TodoCard {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: 150
+                            folder: root.todoFolder
+                            cherry: root.cherry
+                            pink: root.pink
+                            muted: root.muted
+                            textColor: root.textColor
+                            surface: root.surface
+                            surfaceLight: root.surfaceLight
+                            borderColor: root.borderColor
+                            hoverColor: root.hoverColor
+                        }
+                    }
+
+                    QuoteBar {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: false
+                        Layout.preferredHeight: 48
+                        Layout.maximumHeight: 48
+                        filePath: root.quoteFile
+                        cherry: root.cherry
+                        pink: root.pink
+                        muted: root.muted
+                        textColor: root.textColor
+                        surface: root.surface
+                        borderColor: root.borderColor
+                        hoverColor: root.hoverColor
                     }
                 }
             }
         }
     }
 
-    // Media actions
     Process { id: previousTrack; command: ["playerctl", "previous"] }
     Process { id: toggleTrack; command: ["playerctl", "play-pause"] }
     Process { id: nextTrack; command: ["playerctl", "next"] }
-    // Wi-Fi: iwgtk (iwd GUI)   Bluetooth: blueman-manager
     Process { id: wifiTool; command: root.toolCommand("iwgtk", "iwgtk is not installed. Install it with: yay -S iwgtk") }
     Process { id: bluetoothTool; command: root.toolCommand("blueman-manager", "blueman is not installed. Install it with: sudo pacman -S blueman") }
     Process { id: bluetoothToggle; command: ["sh", "-lc", "if bluetoothctl show | grep -q 'Powered: yes'; then bluetoothctl power off; else bluetoothctl power on; fi"] }

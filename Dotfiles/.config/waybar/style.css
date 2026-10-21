@@ -93,12 +93,17 @@ tooltip label {
 #battery,
 #backlight,
 #power-profiles-daemon,
+#custom-razp,
 #custom-notification {
   background-color: @mantle;
   padding: 0 15px 0 15px;
   margin: 0 0 0 12px;
   border-radius: 15px;
   color: @subtext1;
+}
+
+#custom-razp {
+  color: @rosewater;
 }
 
 #pulseaudio {
@@ -123,6 +128,10 @@ tooltip label {
 
 #custom-notification {
   color: @subtext2;
+}
+
+#razp {
+	color: @subtext2
 }
 
 #clock {
