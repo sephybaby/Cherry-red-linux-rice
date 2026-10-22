@@ -15,8 +15,10 @@ Item {
 
     property real value: 0
     property real arcRadius: width * 0.46       // a ring just outside the vinyl disc
-    property real startAngle: Math.PI - 0.35    // left, ~20 degrees below the diameter
-    property real sweep: Math.PI + 0.95         // positive = clockwise over the top, ends ~35 degrees below the right side
+    property real dip: 0.45                     // how far (radians, ~26 degrees) each end drops below the diameter
+    // symmetric: starts `dip` below the left side, ends `dip` below the right side
+    property real startAngle: Math.PI - dip
+    property real sweep: Math.PI + 2 * dip      // positive = clockwise over the top
     property real lineWidth: 5
 
     property color trackColor: "#24ffffff"

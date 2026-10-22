@@ -22,6 +22,6 @@ hl.window_rule({
 	name = "wifi-bluetooth-popup",
 	match = { class = "^.*(iwgtk|blueman).*$" },
 	float = true,
-	center = true,
 	size = { "560", "640" },
+	move = { "(monitor_w-window_w)/2", "20" },
 })

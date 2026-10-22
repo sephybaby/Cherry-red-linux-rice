@@ -1,0 +1,312 @@
+/* =========================================================
+   Cherry / dark-red theme for the Wi-Fi (iwgtk) popup. GTK4.
+   Only applied when the dashboard launches the app.
+
+   window #1a0409   rows #2a0812   hover #3d0c1b   selected #531226
+   border #4a1022   cherry #8f142b   bright #c2203f
+   pink #ffb8c8     text #ffe8ee     muted #a96b7b
+   ========================================================= */
+
+* {
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
+window,
+window.background,
+.background {
+    background-color: #1a0409;
+    color: #ffe8ee;
+}
+
+label {
+    color: #ffe8ee;
+}
+
+label.dim-label,
+.dim-label,
+.subtitle {
+    color: #a96b7b;
+}
+
+/* ---------- Title bar ---------- */
+headerbar,
+.titlebar {
+    background-image: none;
+    background-color: #2a0812;
+    color: #ffe8ee;
+    border-bottom: 1px solid #4a1022;
+    box-shadow: none;
+}
+
+headerbar label,
+headerbar .title {
+    color: #ffb8c8;
+    font-weight: bold;
+}
+
+windowcontrols button {
+    background-color: transparent;
+    border: none;
+}
+
+/* ---------- Buttons ---------- */
+button {
+    background-image: none;
+    background-color: #2a0812;
+    color: #ffb8c8;
+    border: 1px solid #4a1022;
+    border-radius: 10px;
+    box-shadow: none;
+    padding: 5px 12px;
+}
+
+button:hover {
+    background-color: #3d0c1b;
+    border-color: #8f142b;
+}
+
+button:active,
+button:checked {
+    background-color: #8f142b;
+    border-color: #c2203f;
+    color: #ffe8ee;
+}
+
+button:disabled {
+    background-color: #1f060c;
+    color: #6b3a47;
+}
+
+button.suggested-action {
+    background-color: #8f142b;
+    border-color: #c2203f;
+    color: #ffffff;
+}
+
+button.suggested-action:hover {
+    background-color: #b01a37;
+}
+
+button.destructive-action {
+    background-color: #6e0c1c;
+    border-color: #c2203f;
+    color: #ffe8ee;
+}
+
+button.flat {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+button.flat:hover {
+    background-color: #3d0c1b;
+}
+
+/* ---------- Lists ---------- */
+list,
+listview,
+columnview,
+.view {
+    background-color: transparent;
+    color: #ffe8ee;
+}
+
+row,
+listview > row,
+list > row {
+    background-color: #2a0812;
+    color: #ffe8ee;
+    border: 1px solid #3a0d1b;
+    border-radius: 12px;
+    margin: 3px 4px;
+    padding: 4px 6px;
+}
+
+row:hover {
+    background-color: #3d0c1b;
+    border-color: #6e1f3a;
+}
+
+row:selected,
+row:active {
+    background-color: #531226;
+    border-color: #a8324a;
+    color: #ffe8ee;
+}
+
+row label.subtitle,
+row .dim-label {
+    color: #a96b7b;
+}
+
+separator {
+    background-color: #4a1022;
+    min-height: 1px;
+    min-width: 1px;
+}
+
+/* ---------- Inputs ---------- */
+entry,
+spinbutton,
+textview,
+textview text {
+    background-image: none;
+    background-color: #16080e;
+    color: #ffe8ee;
+    caret-color: #ffb8c8;
+    border: 1px solid #4b1729;
+    border-radius: 10px;
+    box-shadow: none;
+}
+
+entry:focus-within,
+spinbutton:focus-within {
+    border-color: #c2203f;
+}
+
+selection,
+entry selection,
+textview selection {
+    background-color: #8f142b;
+    color: #ffffff;
+}
+
+/* ---------- Switch, check, scale ---------- */
+switch {
+    background-image: none;
+    background-color: #2a0812;
+    border: 1px solid #4a1022;
+    border-radius: 14px;
+    color: transparent;
+}
+
+switch:checked {
+    background-color: #8f142b;
+    border-color: #c2203f;
+}
+
+switch slider {
+    background-image: none;
+    background-color: #a96b7b;
+    border: none;
+    border-radius: 12px;
+}
+
+switch:checked slider {
+    background-color: #ffe8ee;
+}
+
+check,
+radio {
+    background-image: none;
+    background-color: #16080e;
+    border: 1px solid #6e1f3a;
+    color: #ffe8ee;
+}
+
+check:checked,
+radio:checked {
+    background-color: #8f142b;
+    border-color: #c2203f;
+}
+
+scale trough {
+    background-color: #2a0812;
+    border-radius: 8px;
+}
+
+scale highlight,
+progressbar progress {
+    background-color: #8f142b;
+    border-radius: 8px;
+}
+
+scale slider {
+    background-color: #ffe8ee;
+    border: none;
+}
+
+progressbar trough {
+    background-color: #2a0812;
+}
+
+/* ---------- Scrollbars ---------- */
+scrollbar,
+scrollbar trough {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    background-color: #6e1f3a;
+    border-radius: 10px;
+    min-width: 6px;
+    min-height: 30px;
+}
+
+scrollbar slider:hover {
+    background-color: #a52e58;
+}
+
+/* ---------- Menus, popovers, dialogs ---------- */
+popover > contents,
+popover.background > contents,
+.popup {
+    background-color: #1a0409;
+    color: #ffe8ee;
+    border: 1px solid #6e1f3a;
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+modelbutton:hover,
+menuitem:hover {
+    background-color: #3d0c1b;
+}
+
+tooltip,
+tooltip.background {
+    background-color: #2a0812;
+    color: #ffe8ee;
+    border: 1px solid #6e1f3a;
+    border-radius: 8px;
+}
+
+messagedialog,
+dialog {
+    background-color: #1a0409;
+    color: #ffe8ee;
+}
+
+infobar,
+.infobar {
+    background-color: #3d0c1b;
+    border: 1px solid #8f142b;
+    color: #ffe8ee;
+}
+
+frame > border,
+.frame {
+    border: 1px solid #4a1022;
+    border-radius: 12px;
+}
+
+notebook > header {
+    background-color: #2a0812;
+}
+
+notebook > header > tabs > tab:checked {
+    background-color: #531226;
+    color: #ffe8ee;
+}
+
+.error,
+label.error {
+    color: #ff8da4;
+}
+
+.success,
+label.success {
+    color: #ffb8c8;
+}
