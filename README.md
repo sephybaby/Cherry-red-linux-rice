@@ -1,7 +1,7 @@
 # Cherry red ♡
 
 <p align="center">
-  <img src="screenshots/desktop/desktop.png" alt="Arch Linux KDE Desktop" width="100%">
+  <img src="Screenshots/desktop/desktop.png" alt="Arch Linux KDE Desktop" width="100%">
 </p>
 
 <p align="center">
