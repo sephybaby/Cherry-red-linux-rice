@@ -1,0 +1,6 @@
+[Greeter]
+WallpaperPlugin=org.kde.image
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file:///home/sephy/Downloads/mariola-grobelska-7vOEu5OmBec-unsplash.jpg
+PreviewImage=file:///home/sephy/Downloads/mariola-grobelska-7vOEu5OmBec-unsplash.jpg

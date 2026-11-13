@@ -1,0 +1,12 @@
+catppuccin-cursors-mocha
+catppuccin-gtk-theme-mocha
+eww-git
+gray-git
+paru
+paru-debug
+ttf-league-gothic
+ttf-phosphor-icons
+vesktop-bin
+yay
+yay-debug
+zulu17-fx-bin
