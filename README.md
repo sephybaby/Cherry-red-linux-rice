@@ -49,52 +49,6 @@ Everything is organized to keep the desktop setup reproducible, customizable and
 
 *Screenshots will be added as the rice develops.*
 
-## ✿ Repository Structure
-
-```text
-arch-rice/
-│
-├── kde/
-│   ├── config/
-│   ├── plasma-themes/
-│   ├── window-decorations/
-│   ├── color-schemes/
-│   ├── icons/
-│   ├── cursors/
-│   ├── kvantum/
-│   ├── gtk/
-│   ├── konsole/
-│   ├── kwin-scripts/
-│   ├── widgets/
-│   ├── sounds/
-│   └── sddm/
-│
-├── wallpapers/
-│   ├── desktop/
-│   └── lockscreen/
-│
-├── packages/
-│   ├── pacman.txt
-│   └── aur.txt
-│
-├── scripts/
-│   ├── install.sh
-│   ├── backup.sh
-│   └── restore.sh
-│
-├── screenshots/
-│   ├── desktop/
-│   ├── applications/
-│   ├── krunner/
-│   └── konsole/
-│
-├── docs/
-│
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
 ## ✿ Requirements
 
 - Arch Linux
